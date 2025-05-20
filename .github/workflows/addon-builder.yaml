@@ -93,7 +93,7 @@ jobs:
           mkdir -p artifacts
           cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
           cp -fv build/install/lib/*dll bin/
-          tar -czvf ./artifacts/sherpa-onnx-node-cuda.tar.gz ./bin/*
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-node-cuda.tar.gz ./* && cd ..
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -186,7 +186,7 @@ jobs:
           mkdir -p artifacts
           cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
           cp -fv build/install/lib/*dll bin/
-          tar -czvf ./artifacts/sherpa-onnx-node.tar.gz ./bin/*
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-node.tar.gz ./* && cd ..
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
