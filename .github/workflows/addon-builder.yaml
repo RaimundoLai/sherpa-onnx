@@ -1,0 +1,246 @@
+name: npm-addon-win-x64
+
+on:
+  push:
+    branches:
+      - builder
+  workflow_dispatch:
+
+jobs:
+  npm-addon-win-x64-cuda:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022]
+        python-version: ["3.8"]
+
+    steps:
+      - name: Clone sherpa-onnx repository
+        uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          branch: dev
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Display node version
+        shell: bash
+        run: |
+          node --version
+
+      - name: Build sherpa-onnx
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=./install \
+            -DBUILD_SHARED_LIBS=ON \
+            -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+            -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+            -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            -DSHERPA_ONNX_ENABLE_GPU=ON \
+            ..
+
+          ls -lh  _deps/onnxruntime-src/lib/
+
+          cmake --build . --config Release --target install -- -m:6
+
+          ls -lh install/lib
+
+          echo "----------"
+
+          cp -v  _deps/onnxruntime-src/lib/*.lib ./install/lib
+          cp -v  _deps/onnxruntime-src/lib/*.dll ./install/lib
+
+          echo "----------"
+
+          ls -lh install/lib
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+
+          cd scripts/node-addon-api/
+
+          npm i
+
+          ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Prepare for publish
+        shell: bash
+        run: |
+          owner=${{ github.repository_owner }}
+          export owner
+
+          echo "---"
+          ls -lh build/install/lib/
+          echo "---"
+          ls -lh build/install/lib/
+          echo "---"
+          mkdir -p bin
+          mkdir -p artifacts
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          cp -fv build/install/lib/*dll bin/
+          tar -czvf ./artifacts/sherpa-onnx-node-cuda.tar.gz ./bin/*
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-node-cuda.tar.gz
+          path: artifacts/sherpa-onnx-node-cuda.tar.gz
+  npm-addon-win-x64:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022]
+        python-version: ["3.8"]
+
+    steps:
+      - name: Clone sherpa-onnx repository
+        uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          branch: dev
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Display node version
+        shell: bash
+        run: |
+          node --version
+
+      - name: Build sherpa-onnx
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=./install \
+            -DBUILD_SHARED_LIBS=ON \
+            -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+            -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+            -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            -DSHERPA_ONNX_ENABLE_GPU=OFF \
+            ..
+
+          ls -lh  _deps/onnxruntime-src/lib/
+
+          cmake --build . --config Release --target install -- -m:6
+
+          ls -lh install/lib
+
+          echo "----------"
+
+          cp -v  _deps/onnxruntime-src/lib/*.lib ./install/lib
+          cp -v  _deps/onnxruntime-src/lib/*.dll ./install/lib
+
+          echo "----------"
+
+          ls -lh install/lib
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+
+          cd scripts/node-addon-api/
+
+          npm i
+
+          ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Prepare for publish
+        shell: bash
+        run: |
+          owner=${{ github.repository_owner }}
+          export owner
+
+          echo "---"
+          ls -lh build/install/lib/
+          echo "---"
+          ls -lh build/install/lib/
+          echo "---"
+          mkdir -p bin
+          mkdir -p artifacts
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          cp -fv build/install/lib/*dll bin/
+          tar -czvf ./artifacts/sherpa-onnx-node.tar.gz ./bin/*
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-win-x64.tar.gz
+          path: artifacts/sherpa-onnx-node.tar.gz
+          
+  create-update-release:
+    needs: [npm-addon-win-x64, npm-addon-win-x64-cuda]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: List artifacts
+        run: ls -R artifacts/
+        
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        
+      - name: Create Timestamped Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: release-${{ steps.date.outputs.date }}
+          name: npm-addon builds ${{ steps.date.outputs.date }}
+          body: |
+             npm-addon builds (Build date: ${{ steps.date.outputs.date }})
+             - Windows (with CUDA support)
+             - Windows (without CUDA support)
+          files: |
+            artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Update Latest Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: latest
+          name: Latest npm-addon builds
+          body: |
+            Latest npm-addon builds.
+            Last updated: ${{ steps.date.outputs.date }}
+            - Windows (with CUDA support)
+            - Windows (without CUDA support)
+          files: |
+            artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
