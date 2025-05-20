@@ -1,4 +1,4 @@
-name: npm-addon-win-x64
+name: Build npm-addon
 
 on:
   push:
