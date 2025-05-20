@@ -338,9 +338,17 @@ static Napi::Object OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
   std::string text = _text.Utf8Value();
   int32_t sid = obj.Get("sid").As<Napi::Number>().Int32Value();
   float speed = obj.Get("speed").As<Napi::Number>().FloatValue();
-
+  bool g2p = false;
+  if (obj.Has("g2p") && obj.Get("g2p").IsBoolean()) {
+    g2p = obj.Get("g2p").As<Napi::Boolean>().Value();
+  }
+  std::string lang;
+  if (obj.Has("lang") && obj.Get("lang").IsString()) {
+    Napi::String _lang = obj.Get("lang").As<Napi::String>();
+    lang = _lang.Utf8Value();
+  }
   const SherpaOnnxGeneratedAudio *audio;
-  audio = SherpaOnnxOfflineTtsGenerate(tts, text.c_str(), sid, speed);
+  audio = SherpaOnnxOfflineTtsGenerate(tts, text.c_str(), sid, speed, g2p, lang.c_str());
 
   if (enable_external_buffer) {
     Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
@@ -420,7 +428,8 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
  public:
   TtsGenerateWorker(const Napi::Env &env, TSFN tsfn,
                     const SherpaOnnxOfflineTts *tts, const std::string &text,
-                    float speed, int32_t sid, bool use_external_buffer)
+                    float speed, int32_t sid, bool use_external_buffer, bool g2p,
+                    const std::string &lang)
       : tsfn_(tsfn),
         Napi::AsyncWorker{env, "TtsGenerateWorker"},
         deferred_(env),
@@ -428,7 +437,9 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
         text_(text),
         speed_(speed),
         sid_(sid),
-        use_external_buffer_(use_external_buffer) {}
+        use_external_buffer_(use_external_buffer),
+        g2p_(g2p),
+        lang_(lang) {}
 
   Napi::Promise Promise() { return deferred_.Promise(); }
 
@@ -463,7 +474,7 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
       return 1;
     };
     audio_ = SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
-        tts_, text_.c_str(), sid_, speed_, callback, this);
+        tts_, text_.c_str(), sid_, speed_,g2p_, lang_.c_str(), callback, this);
 
     tsfn_.Release();
   }
@@ -511,6 +522,8 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
   float speed_;
   int32_t sid_;
   bool use_external_buffer_;
+  bool g2p_;
+  std::string lang_;
 
   const SherpaOnnxGeneratedAudio *audio_;
 
@@ -602,7 +615,15 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
   std::string text = _text.Utf8Value();
   int32_t sid = obj.Get("sid").As<Napi::Number>().Int32Value();
   float speed = obj.Get("speed").As<Napi::Number>().FloatValue();
-
+  bool g2p = false;
+  if (obj.Has("g2p") && obj.Get("g2p").IsBoolean()) {
+    g2p = obj.Get("g2p").As<Napi::Boolean>().Value();
+  }
+  std::string lang;
+  if (obj.Has("lang") && obj.Get("lang").IsString()) {
+    Napi::String _lang = obj.Get("lang").As<Napi::String>();
+    lang = _lang.Utf8Value();
+  }
   Napi::Function cb;
   if (obj.Has("callback") && obj.Get("callback").IsFunction()) {
     cb = obj.Get("callback").As<Napi::Function>();
@@ -621,7 +642,7 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
       [](Napi::Env, void *, Napi::Reference<Napi::Value> *ctx) { delete ctx; });
 
   TtsGenerateWorker *worker = new TtsGenerateWorker(
-      env, tsfn, tts, text, speed, sid, enable_external_buffer);
+      env, tsfn, tts, text, speed, sid, enable_external_buffer, g2p, lang);
   worker->Queue();
   return worker->Promise();
 }

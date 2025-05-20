@@ -1215,10 +1215,10 @@ int32_t SherpaOnnxOfflineTtsNumSpeakers(const SherpaOnnxOfflineTts *tts) {
 }
 
 static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     std::function<int32_t(const float *, int32_t, float)> callback) {
   sherpa_onnx::GeneratedAudio audio =
-      tts->impl->Generate(text, sid, speed, callback);
+      tts->impl->Generate(text, sid, speed, g2p, lang, callback);
 
   if (audio.samples.empty()) {
     return nullptr;
@@ -1238,51 +1238,51 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
 
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid,
-    float speed) {
-  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, nullptr);
+    float speed, bool g2p, const char *lang) {
+  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, nullptr);
 }
 
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithCallback(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioCallback callback) {
   auto wrapper = [callback](const float *samples, int32_t n,
                             float /*progress*/) {
     return callback(samples, n);
   };
 
-  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, wrapper);
+  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, wrapper);
 }
 
 const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithProgressCallback(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioProgressCallback callback) {
   auto wrapper = [callback](const float *samples, int32_t n, float progress) {
     return callback(samples, n, progress);
   };
-  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, wrapper);
+  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, wrapper);
 }
 
 const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
   auto wrapper = [callback, arg](const float *samples, int32_t n,
                                  float progress) {
     return callback(samples, n, progress, arg);
   };
-  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, wrapper);
+  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, wrapper);
 }
 
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithCallbackWithArg(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioCallbackWithArg callback, void *arg) {
   auto wrapper = [callback, arg](const float *samples, int32_t n,
                                  float /*progress*/) {
     return callback(samples, n, arg);
   };
 
-  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, wrapper);
+  return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, wrapper);
 }
 
 void SherpaOnnxDestroyOfflineTtsGeneratedAudio(

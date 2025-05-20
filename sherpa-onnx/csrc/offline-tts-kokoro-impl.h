@@ -150,7 +150,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
   }
 
   GeneratedAudio Generate(
-      const std::string &_text, int64_t sid = 0, float speed = 1.0,
+      const std::string &_text, int64_t sid = 0, float speed = 1.0, bool g2p = false, const std::string &_lang = "en-us",
       GeneratedAudioCallback callback = nullptr) const override {
     const auto &meta_data = model_->GetMetaData();
     int32_t num_speakers = meta_data.num_speakers;
@@ -220,8 +220,30 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
       }
     }
 
-    std::vector<TokenIDs> token_ids =
-        frontend_->ConvertTextToTokenIds(text, meta_data.voice);
+    std::vector<TokenIDs> token_ids;
+    if (g2p) {
+      OfflineTtsFrontend* base_ptr = frontend_.get();
+      KokoroMultiLangLexicon* derived_ptr = dynamic_cast<KokoroMultiLangLexicon*>(base_ptr);
+      if (derived_ptr) {
+        token_ids = derived_ptr->ConvertPhonemeToTokenIds(text, _lang);
+      } else {
+        SHERPA_ONNX_LOGE("Error: Frontend is not a KokoroMultiLangLexicon instance when g2p is enabled.");
+        token_ids.clear();
+      }
+    } else {
+      token_ids = frontend_->ConvertTextToTokenIds(text, _lang);
+    }
+
+    if (token_ids.empty() ||
+        (token_ids.size() == 1 && token_ids[0].tokens.empty())) {
+      if (config_.model.debug) {
+        SHERPA_ONNX_LOGE("No tokens generated, adding period token (4)");
+      }
+      TokenIDs period_token;
+      period_token.tokens = {0, 4, 0};  // BOS(0), .(4), EOS(0)
+      token_ids.clear();
+      token_ids.push_back(period_token);
+    }
 
     if (token_ids.empty() ||
         (token_ids.size() == 1 && token_ids[0].tokens.empty())) {

@@ -18,6 +18,13 @@ class OfflineTts {
   generate(obj) {
     return addon.offlineTtsGenerate(this.handle, obj);
   }
+
+  generateAsync(obj) {
+    return new Promise((resolve, reject) => {
+      const result = addon.offlineTtsGenerateAsync(this.handle, obj);
+      resolve(result);
+    });
+  }
 }
 
 module.exports = {

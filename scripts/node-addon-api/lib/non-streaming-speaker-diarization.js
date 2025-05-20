@@ -26,6 +26,12 @@ class OfflineSpeakerDiarization {
     return addon.offlineSpeakerDiarizationProcess(this.handle, samples);
   }
 
+  processAsync(samples, callable) {
+    return new Promise((resolve, reject) => {
+      const result = addon.offlineSpeakerDiarizationProcessAsync(this.handle, samples, callable);
+      resolve(result);
+    });
+  }
   setConfig(config) {
     addon.offlineSpeakerDiarizationSetConfig(this.handle, config);
     this.config.clustering = config.clustering;

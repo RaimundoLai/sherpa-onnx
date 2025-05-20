@@ -24,7 +24,7 @@ class OfflineTtsImpl {
                                                 const OfflineTtsConfig &config);
 
   virtual GeneratedAudio Generate(
-      const std::string &text, int64_t sid = 0, float speed = 1.0,
+      const std::string &text, int64_t sid = 0, float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
       GeneratedAudioCallback callback = nullptr) const = 0;
 
   // Return the sample rate of the generated audio

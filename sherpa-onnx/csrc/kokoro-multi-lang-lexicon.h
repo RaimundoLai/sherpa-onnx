@@ -33,8 +33,11 @@ class KokoroMultiLangLexicon : public OfflineTtsFrontend {
                          bool debug);
 
   std::vector<TokenIDs> ConvertTextToTokenIds(
-      const std::string &text, const std::string &voice = "") const override;
+      const std::string &text, const std::string &lang = "") const override;
 
+  std::vector<TokenIDs> ConvertPhonemeToTokenIds(
+      const std::string &text, const std::string &lang = "") const;
+  
  private:
   class Impl;
   std::unique_ptr<Impl> impl_;

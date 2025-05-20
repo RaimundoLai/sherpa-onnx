@@ -1022,7 +1022,7 @@ SherpaOnnxOfflineTtsNumSpeakers(const SherpaOnnxOfflineTts *tts);
 // returned pointer to avoid memory leak.
 SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid,
-    float speed);
+    float speed, bool g2p, const char *lang);
 
 // callback is called whenever SherpaOnnxOfflineTtsConfig.max_num_sentences
 // sentences have been processed. The pointer passed to the callback
@@ -1030,26 +1030,26 @@ SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
 // a reference to it.
 SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithCallback(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioCallback callback);
 
 SHERPA_ONNX_API
 const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithProgressCallback(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioProgressCallback callback);
 
 SHERPA_ONNX_API
 const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg);
 
 // Same as SherpaOnnxGeneratedAudioCallback but you can pass an additional
 // `void* arg` to the callback.
 SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithCallbackWithArg(
-    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     SherpaOnnxGeneratedAudioCallbackWithArg callback, void *arg);
 
 SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTtsGeneratedAudio(

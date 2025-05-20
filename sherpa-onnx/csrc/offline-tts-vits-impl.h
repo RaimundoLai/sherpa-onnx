@@ -150,7 +150,7 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
   }
 
   GeneratedAudio Generate(
-      const std::string &_text, int64_t sid = 0, float speed = 1.0,
+      const std::string &_text, int64_t sid = 0, float speed = 1.0, bool g2p = false, const std::string &_lang = "en-us", 
       GeneratedAudioCallback callback = nullptr) const override {
     const auto &meta_data = model_->GetMetaData();
     int32_t num_speakers = meta_data.num_speakers;

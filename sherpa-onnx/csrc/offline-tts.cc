@@ -171,13 +171,14 @@ OfflineTts::OfflineTts(Manager *mgr, const OfflineTtsConfig &config)
 OfflineTts::~OfflineTts() = default;
 
 GeneratedAudio OfflineTts::Generate(
-    const std::string &text, int64_t sid /*=0*/, float speed /*= 1.0*/,
+    const std::string &text, int64_t sid /*=0*/, float speed /*= 1.0*/, bool g2p /*= false*/,
+    const std::string &lang  /*=en-us*/,
     GeneratedAudioCallback callback /*= nullptr*/) const {
 #if !defined(_WIN32)
-  return impl_->Generate(text, sid, speed, std::move(callback));
+  return impl_->Generate(text, sid, speed, g2p, lang, std::move(callback));
 #else
   if (IsUtf8(text)) {
-    return impl_->Generate(text, sid, speed, std::move(callback));
+    return impl_->Generate(text, sid, speed, g2p, lang, std::move(callback));
   } else if (IsGB2312(text)) {
     auto utf8_text = Gb2312ToUtf8(text);
     static bool printed = false;
@@ -186,12 +187,12 @@ GeneratedAudio OfflineTts::Generate(
           "Detected GB2312 encoded string! Converting it to UTF8.");
       printed = true;
     }
-    return impl_->Generate(utf8_text, sid, speed, std::move(callback));
+    return impl_->Generate(utf8_text, sid, speed, g2p, lang, std::move(callback));
   } else {
     SHERPA_ONNX_LOGE(
         "Non UTF8 encoded string is received. You would not get expected "
         "results!");
-    return impl_->Generate(text, sid, speed, std::move(callback));
+    return impl_->Generate(text, sid, speed, g2p, lang, std::move(callback));
   }
 #endif
 }

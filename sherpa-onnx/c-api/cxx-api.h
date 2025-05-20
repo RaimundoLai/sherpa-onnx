@@ -423,7 +423,7 @@ class SHERPA_ONNX_API OfflineTts
   //                 sentences have been processed. The callback is called in
   //                 the current thread.
   GeneratedAudio Generate(const std::string &text, int32_t sid = 0,
-                          float speed = 1.0,
+                          float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
                           OfflineTtsCallback callback = nullptr,
                           void *arg = nullptr) const;
 

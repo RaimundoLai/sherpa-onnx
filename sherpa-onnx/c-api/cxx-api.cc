@@ -396,15 +396,17 @@ int32_t OfflineTts::NumSpeakers() const {
 }
 
 GeneratedAudio OfflineTts::Generate(const std::string &text,
-                                    int32_t sid /*= 0*/, float speed /*= 1.0*/,
+                                    int32_t sid /*= 0*/, float speed, /*= 1.0*/
+                                    bool g2p,
+                                    const std::string &lang /*= en-us*/, 
                                     OfflineTtsCallback callback /*= nullptr*/,
                                     void *arg /*= nullptr*/) const {
   const SherpaOnnxGeneratedAudio *audio;
   if (!callback) {
-    audio = SherpaOnnxOfflineTtsGenerate(p_, text.c_str(), sid, speed);
+    audio = SherpaOnnxOfflineTtsGenerate(p_, text.c_str(), sid, speed, g2p, lang.c_str());
   } else {
     audio = SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
-        p_, text.c_str(), sid, speed, callback, arg);
+        p_, text.c_str(), sid, speed, g2p, lang.c_str(), callback, arg);
   }
 
   GeneratedAudio ans;

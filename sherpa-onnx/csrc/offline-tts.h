@@ -92,7 +92,7 @@ class OfflineTts {
   //                 he/she wants to access the samples after the callback
   //                 returns. The callback is called in the current thread.
   GeneratedAudio Generate(const std::string &text, int64_t sid = 0,
-                          float speed = 1.0,
+                          float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
                           GeneratedAudioCallback callback = nullptr) const;
 
   // Return the sample rate of the generated audio
