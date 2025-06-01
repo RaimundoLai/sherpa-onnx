@@ -285,9 +285,10 @@ class KokoroMultiLangLexicon::Impl {
 
       auto ms = ToString(match_str);
       uint8_t c = reinterpret_cast<const uint8_t *>(ms.data())[0];
-
+      
       std::vector<std::vector<int32_t>> ids_vec;
-	        if (ms.size() >= 2 && ms[0] == '[' && ms.back() == ']') {
+      bool merge = false;
+	    if (ms.size() >= 2 && ms[0] == '[' && ms.back() == ']') {
         std::string phoneme = ms.substr(1, ms.size() - 2);
         if (debug_) {
           SHERPA_ONNX_LOGE("Phoneme: %s", phoneme.c_str());
@@ -301,6 +302,7 @@ class KokoroMultiLangLexicon::Impl {
           }
           ids_vec.push_back(std::move(converted_tokens));
         }
+        merge = true;
       } else if (std::regex_match(match_str, we_zh)) {
         if (debug_) {
           SHERPA_ONNX_LOGE("Chinese: %s", ms.c_str());
@@ -314,14 +316,18 @@ class KokoroMultiLangLexicon::Impl {
       }
 
       for (const auto &ids : ids_vec) {
-        if (ids.size() > 10 + 2) {
+        if (ids.size() > 10 + 2 && !merge) {
           ans.emplace_back(ids);
         } else {
           if (ans.empty()) {
             ans.emplace_back(ids);
           } else {
-            if ((ans.back().tokens.size() + ids.size() < 50) ||
-                (ids.size() < 5)) {
+            if(merge) {
+              ans.back().tokens.back() = ids[1];
+              ans.back().tokens.insert(ans.back().tokens.end(), ids.begin() + 2,
+                                       ids.end());
+            } else if ((ans.back().tokens.size() + ids.size() < 50) ||
+                (ids.size() < 10)) {
               ans.back().tokens.back() = ids[1];
               ans.back().tokens.insert(ans.back().tokens.end(), ids.begin() + 2,
                                        ids.end());
