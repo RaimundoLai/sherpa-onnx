@@ -388,13 +388,6 @@ if(SHERPA_ONNX_ENABLE_WEBSOCKET)
   include(asio)
 endif()
 
-if(SHERPA_ONNX_ENABLE_TTS)
-  include(espeak-ng-for-piper)
-  set(ESPEAK_NG_DIR ${espeak_ng_SOURCE_DIR})
-  message(STATUS "ESPEAK_NG_DIR: ${ESPEAK_NG_DIR}")
-  include(piper-phonemize)
-endif()
-
 include(cppjieba) # It is a header-only C++ library
 
 if(SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION)

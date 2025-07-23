@@ -360,7 +360,7 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
                 meta_data.is_icefall) &&
                !config_.model.vits.data_dir.empty()) {
       frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-          mgr, config_.model.vits.tokens, config_.model.vits.data_dir,
+          mgr, config_.model.vits.tokens, 
           meta_data);
     } else {
       if (config_.model.vits.lexicon.empty()) {
@@ -412,7 +412,7 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
                 meta_data.is_icefall) &&
                !config_.model.vits.data_dir.empty()) {
       frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-          config_.model.vits.tokens, config_.model.vits.data_dir,
+          config_.model.vits.tokens, 
           model_->GetMetaData());
     } else {
       if (config_.model.vits.lexicon.empty()) {

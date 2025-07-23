@@ -190,6 +190,7 @@ if(SHERPA_ONNX_ENABLE_TTS)
     piper-phonemize-lexicon.cc
     vocoder.cc
     vocos-vocoder.cc
+    tokenizer-phonemize.cc
   )
 endif()
 
@@ -291,9 +292,6 @@ endif()
 
 target_link_libraries(sherpa-onnx-core fstfar fst)
 
-if(SHERPA_ONNX_ENABLE_TTS)
-  target_link_libraries(sherpa-onnx-core piper_phonemize)
-endif()
 target_link_libraries(sherpa-onnx-core cppjieba)
 
 if(SHERPA_ONNX_ENABLE_CHECK)
@@ -621,7 +619,6 @@ if(SHERPA_ONNX_ENABLE_TESTS)
   if(SHERPA_ONNX_ENABLE_TTS)
     list(APPEND sherpa_onnx_test_srcs
       cppjieba-test.cc
-      piper-phonemize-test.cc
     )
   endif()
 

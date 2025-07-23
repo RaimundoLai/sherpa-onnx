@@ -5,6 +5,7 @@
 #ifndef SHERPA_ONNX_CSRC_PIPER_PHONEMIZE_LEXICON_H_
 #define SHERPA_ONNX_CSRC_PIPER_PHONEMIZE_LEXICON_H_
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,34 +14,52 @@
 #include "sherpa-onnx/csrc/offline-tts-kokoro-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-model-meta-data.h"
+#include "sherpa-onnx/csrc/tokenizer.h"
 
 namespace sherpa_onnx {
 
 class PiperPhonemizeLexicon : public OfflineTtsFrontend {
  public:
-  PiperPhonemizeLexicon(const std::string &tokens, const std::string &data_dir,
-                        const OfflineTtsVitsModelMetaData &vits_meta_data);
+  PiperPhonemizeLexicon(
+    const std::string &tokens,
+    const OfflineTtsVitsModelMetaData &vits_meta_data);
 
-  PiperPhonemizeLexicon(const std::string &tokens, const std::string &data_dir,
-                        const OfflineTtsMatchaModelMetaData &matcha_meta_data);
+  PiperPhonemizeLexicon(
+      const std::string &tokens,
+      const OfflineTtsMatchaModelMetaData &matcha_meta_data);
+      
+  PiperPhonemizeLexicon(
+      const std::string &g2p_model,
+      const std::string &tokens,
+      const OfflineTtsVitsModelMetaData &vits_meta_data);
 
-  PiperPhonemizeLexicon(const std::string &tokens, const std::string &data_dir,
-                        const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
+  PiperPhonemizeLexicon(
+      const std::string &g2p_model, 
+      const std::string &tokens,
+      const OfflineTtsMatchaModelMetaData &matcha_meta_data);
+
+  PiperPhonemizeLexicon(
+      const std::string &g2p_model,
+      const std::string &tokens,
+      const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
 
   template <typename Manager>
-  PiperPhonemizeLexicon(Manager *mgr, const std::string &tokens,
-                        const std::string &data_dir,
-                        const OfflineTtsVitsModelMetaData &vits_meta_data);
+  PiperPhonemizeLexicon(
+      Manager *mgr, const std::string &g2p_model,
+      const std::string &tokens,
+      const OfflineTtsVitsModelMetaData &vits_meta_data);
 
   template <typename Manager>
-  PiperPhonemizeLexicon(Manager *mgr, const std::string &tokens,
-                        const std::string &data_dir,
-                        const OfflineTtsMatchaModelMetaData &matcha_meta_data);
+  PiperPhonemizeLexicon(
+      Manager *mgr, const std::string &g2p_model,
+      const std::string &tokens,
+      const OfflineTtsMatchaModelMetaData &matcha_meta_data);
 
   template <typename Manager>
-  PiperPhonemizeLexicon(Manager *mgr, const std::string &tokens,
-                        const std::string &data_dir,
-                        const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
+  PiperPhonemizeLexicon(
+      Manager *mgr, const std::string &g2p_model,
+      const std::string &tokens,
+      const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
 
   std::vector<TokenIDs> ConvertTextToTokenIds(
       const std::string &text, const std::string &voice = "") const override;
@@ -63,6 +82,8 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
   OfflineTtsKokoroModelMetaData kokoro_meta_data_;
   bool is_matcha_ = false;
   bool is_kokoro_ = false;
+  std::unique_ptr<Tokenizer> tokenizer_;
+  std::unordered_map<std::string, int32_t> new_token2id_;
 };
 
 }  // namespace sherpa_onnx

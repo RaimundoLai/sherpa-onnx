@@ -349,7 +349,7 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
           config_.model.matcha.dict_dir, config_.model.debug);
     } else if (meta_data.has_espeak && !meta_data.jieba) {
       frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-          config_.model.matcha.tokens, config_.model.matcha.data_dir,
+          config_.model.matcha.tokens,
           meta_data);
     } else {
       SHERPA_ONNX_LOGE("jieba + espeaker-ng is not supported yet");

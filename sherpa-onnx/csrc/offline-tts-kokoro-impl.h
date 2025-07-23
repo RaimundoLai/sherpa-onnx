@@ -367,7 +367,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
       }
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
-          mgr, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
+          mgr, config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
           config_.model.kokoro.dict_dir, config_.model.kokoro.data_dir,
           meta_data, config_.model.debug);
 
@@ -375,7 +375,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
     }
 
     frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-        mgr, config_.model.kokoro.tokens, config_.model.kokoro.data_dir,
+        mgr, config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.data_dir,
         meta_data);
   }
 
@@ -394,7 +394,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
       }
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
-          config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
+          config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
           config_.model.kokoro.dict_dir, config_.model.kokoro.data_dir,
           meta_data, config_.model.debug);
 
@@ -403,7 +403,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
     // this is for kokoro v0.19, which supports only English
     frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-        config_.model.kokoro.tokens, config_.model.kokoro.data_dir, meta_data);
+      config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, meta_data);
   }
 
   GeneratedAudio Process(const std::vector<std::vector<int64_t>> &tokens,

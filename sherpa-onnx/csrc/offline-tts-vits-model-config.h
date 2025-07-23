@@ -12,6 +12,7 @@
 namespace sherpa_onnx {
 
 struct OfflineTtsVitsModelConfig {
+
   std::string model;
   std::string lexicon;
   std::string tokens;

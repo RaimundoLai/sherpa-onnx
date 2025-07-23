@@ -23,13 +23,15 @@ void OfflineTtsKokoroModelConfig::Register(ParseOptions *po) {
       "Path to lexicon.txt for Kokoro models. Used only for Kokoro >= v1.0"
       "You can pass multiple files, separated by ','. Example: "
       "./lexicon-us-en.txt,./lexicon-zh.txt");
-  po->Register("kokoro-data-dir", &data_dir,
-               "Path to the directory containing dict for espeak-ng.");
+
   po->Register("kokoro-dict-dir", &dict_dir,
                "Path to the directory containing dict for jieba. "
                "Used only for Kokoro >= v1.0");
   po->Register("kokoro-length-scale", &length_scale,
                "Speech speed. Larger->Slower; Smaller->faster.");
+
+  po->Register("kokoro_g2p_model", &g2p_model,
+                "For G2P: Path to charsiug2p ONNX model.");
 }
 
 bool OfflineTtsKokoroModelConfig::Validate() const {
@@ -71,33 +73,6 @@ bool OfflineTtsKokoroModelConfig::Validate() const {
     return false;
   }
 
-  if (!FileExists(data_dir + "/phontab")) {
-    SHERPA_ONNX_LOGE(
-        "'%s/phontab' does not exist. Please check --kokoro-data-dir",
-        data_dir.c_str());
-    return false;
-  }
-
-  if (!FileExists(data_dir + "/phonindex")) {
-    SHERPA_ONNX_LOGE(
-        "'%s/phonindex' does not exist. Please check --kokoro-data-dir",
-        data_dir.c_str());
-    return false;
-  }
-
-  if (!FileExists(data_dir + "/phondata")) {
-    SHERPA_ONNX_LOGE(
-        "'%s/phondata' does not exist. Please check --kokoro-data-dir",
-        data_dir.c_str());
-    return false;
-  }
-
-  if (!FileExists(data_dir + "/intonations")) {
-    SHERPA_ONNX_LOGE(
-        "'%s/intonations' does not exist. Please check --kokoro-data-dir",
-        data_dir.c_str());
-    return false;
-  }
 
   if (!dict_dir.empty()) {
     std::vector<std::string> required_files = {
@@ -127,6 +102,7 @@ std::string OfflineTtsKokoroModelConfig::ToString() const {
   os << "lexicon=\"" << lexicon << "\", ";
   os << "data_dir=\"" << data_dir << "\", ";
   os << "dict_dir=\"" << dict_dir << "\", ";
+  os << "g2p_model=\"" << g2p_model << "\", ";
   os << "length_scale=" << length_scale << ")";
 
   return os.str();
