@@ -1154,8 +1154,6 @@ static sherpa_onnx::OfflineTtsConfig GetOfflineTtsConfig(
       SHERPA_ONNX_OR(config->model.kokoro.voices, "");
   tts_config.model.kokoro.tokens =
       SHERPA_ONNX_OR(config->model.kokoro.tokens, "");
-  tts_config.model.kokoro.data_dir =
-      SHERPA_ONNX_OR(config->model.kokoro.data_dir, "");
   tts_config.model.kokoro.length_scale =
       SHERPA_ONNX_OR(config->model.kokoro.length_scale, 1.0);
   tts_config.model.kokoro.dict_dir =

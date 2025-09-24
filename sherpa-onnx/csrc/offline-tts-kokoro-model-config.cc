@@ -68,11 +68,6 @@ bool OfflineTtsKokoroModelConfig::Validate() const {
     }
   }
 
-  if (data_dir.empty()) {
-    SHERPA_ONNX_LOGE("Please provide --kokoro-data-dir");
-    return false;
-  }
-
 
   if (!dict_dir.empty()) {
     std::vector<std::string> required_files = {
@@ -100,7 +95,6 @@ std::string OfflineTtsKokoroModelConfig::ToString() const {
   os << "voices=\"" << voices << "\", ";
   os << "tokens=\"" << tokens << "\", ";
   os << "lexicon=\"" << lexicon << "\", ";
-  os << "data_dir=\"" << data_dir << "\", ";
   os << "dict_dir=\"" << dict_dir << "\", ";
   os << "g2p_model=\"" << g2p_model << "\", ";
   os << "length_scale=" << length_scale << ")";

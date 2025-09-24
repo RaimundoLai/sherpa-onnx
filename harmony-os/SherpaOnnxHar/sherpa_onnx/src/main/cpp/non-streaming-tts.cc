@@ -175,7 +175,6 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.model);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.voices);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.data_dir);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.dict_dir);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lexicon);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.g2p_model);

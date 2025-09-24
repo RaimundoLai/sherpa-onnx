@@ -36,8 +36,7 @@ class KokoroMultiLangLexicon::Impl {
  public:
   Impl(const std::string &g2p_model,
        const std::string &tokens, const std::string &lexicon,
-       const std::string &dict_dir, const std::string &data_dir,
-       const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+       const std::string &dict_dir, const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
       : meta_data_(meta_data), debug_(debug) {
     InitTokens(tokens);
 
@@ -50,8 +49,7 @@ class KokoroMultiLangLexicon::Impl {
   template <typename Manager>
   Impl(Manager *mgr, const std::string &g2p_model,
        const std::string &tokens, const std::string &lexicon,
-       const std::string &dict_dir, const std::string &data_dir,
-       const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+       const std::string &dict_dir, const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
       : meta_data_(meta_data), debug_(debug) {
     InitTokens(mgr, tokens);
 
@@ -681,6 +679,10 @@ class KokoroMultiLangLexicon::Impl {
     token2id_["•"] = 173;
     token2id_["ɵ"] = 116;
     token2id_["ɭ"] = 54;
+    token2id_["ɫ"] = 54;
+    token2id_["ɝ"] = 85;
+    token2id_["ʐ"] = 147;
+    token2id_["õ"] = 57;
     token2id_.erase(":");
 
   }
@@ -767,18 +769,14 @@ KokoroMultiLangLexicon::~KokoroMultiLangLexicon() = default;
 KokoroMultiLangLexicon::KokoroMultiLangLexicon(
     const std::string &g2p_model,
     const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
-    const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
-    : impl_(std::make_unique<Impl>(g2p_model, tokens, lexicon, dict_dir, data_dir,
-                                   meta_data, debug)) {}
+    const std::string &dict_dir, const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+    : impl_(std::make_unique<Impl>(g2p_model, tokens, lexicon, dict_dir, meta_data, debug)) {}
 
 template <typename Manager>
 KokoroMultiLangLexicon::KokoroMultiLangLexicon(
     Manager *mgr, const std::string &g2p_model, const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
-    const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
-    : impl_(std::make_unique<Impl>(mgr, g2p_model, tokens, lexicon, dict_dir, data_dir,
-                                   meta_data, debug)) {}
+    const std::string &dict_dir, const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+    : impl_(std::make_unique<Impl>(mgr, g2p_model, tokens, lexicon, dict_dir, meta_data, debug)) {}
 
 std::vector<TokenIDs> KokoroMultiLangLexicon::ConvertTextToTokenIds(
     const std::string &text, const std::string &lang) const {
@@ -792,15 +790,13 @@ return impl_->ConvertPhonemeToTokenIds(text, lang);
 #if __ANDROID_API__ >= 9
 template KokoroMultiLangLexicon::KokoroMultiLangLexicon(
     AAssetManager *mgr, const std::string &g2p_model, const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
-    const OfflineTtsKokoroModelMetaData &meta_data, bool debug);
+    const std::string &dict_dir,  const OfflineTtsKokoroModelMetaData &meta_data, bool debug);
 #endif
 
 #if __OHOS__
 template KokoroMultiLangLexicon::KokoroMultiLangLexicon(
     NativeResourceManager *mgr, const std::string &g2p_model, const std::string &tokens,
-    const std::string &lexicon, const std::string &dict_dir,
-    const std::string &data_dir, const OfflineTtsKokoroModelMetaData &meta_data,
+    const std::string &lexicon, const std::string &dict_dir, const OfflineTtsKokoroModelMetaData &meta_data,
     bool debug);
 #endif
 

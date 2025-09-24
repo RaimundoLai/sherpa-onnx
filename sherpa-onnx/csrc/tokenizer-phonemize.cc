@@ -152,7 +152,7 @@ private:
 
         Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
-        for (int i = 0; i < 100; ++i) { // max_length=100
+        for (int i = 0; i < 300; ++i) { // max_length=300
             std::vector<int64_t> input_shape = {1, (int64_t)input_ids.size()};
             std::vector<int64_t> attention_mask_shape = {1, (int64_t)attention_mask.size()};
             std::vector<int64_t> decoder_input_shape = {1, (int64_t)decoder_input_ids.size()};
