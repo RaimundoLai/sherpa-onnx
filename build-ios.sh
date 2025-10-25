@@ -127,7 +127,7 @@ cmake --build build/os64 --target install
 echo "Generate xcframework"
 
 mkdir -p "build/simulator/lib"
-for f in libkaldi-native-fbank-core.a libsherpa-onnx-c-api.a libsherpa-onnx-core.a \
+for f in libcppinyin_core.a libkaldi-native-fbank-core.a libkissfft-float.a libsherpa-onnx-c-api.a libsherpa-onnx-core.a \
          libsherpa-onnx-fstfar.a libssentencepiece_core.a \
          libsherpa-onnx-fst.a libsherpa-onnx-kaldifst-core.a libkaldi-decoder-core.a \
          libucd.a libpiper_phonemize.a libespeak-ng.a; do
@@ -138,8 +138,10 @@ done
 
 # Merge archive first, because the following xcodebuild create xcframework
 # cannot accept multi archive with the same architecture.
-libtool -static -o build/simulator/sherpa-onnx.a \
+libtool -static -o build/simulator/libsherpa-onnx.a \
+  build/simulator/lib/libcppinyin_core.a \
   build/simulator/lib/libkaldi-native-fbank-core.a \
+  build/simulator/lib/libkissfft-float.a \
   build/simulator/lib/libsherpa-onnx-c-api.a \
   build/simulator/lib/libsherpa-onnx-core.a  \
   build/simulator/lib/libsherpa-onnx-fstfar.a   \
@@ -151,8 +153,10 @@ libtool -static -o build/simulator/sherpa-onnx.a \
   build/simulator/lib/libespeak-ng.a \
   build/simulator/lib/libssentencepiece_core.a
 
-libtool -static -o build/os64/sherpa-onnx.a \
+libtool -static -o build/os64/libsherpa-onnx.a \
+  build/os64/lib/libcppinyin_core.a \
   build/os64/lib/libkaldi-native-fbank-core.a \
+  build/os64/lib/libkissfft-float.a \
   build/os64/lib/libsherpa-onnx-c-api.a \
   build/os64/lib/libsherpa-onnx-core.a \
   build/os64/lib/libsherpa-onnx-fstfar.a   \
@@ -167,17 +171,6 @@ libtool -static -o build/os64/sherpa-onnx.a \
 rm -rf sherpa-onnx.xcframework
 
 xcodebuild -create-xcframework \
-      -library "build/os64/sherpa-onnx.a" \
-      -library "build/simulator/sherpa-onnx.a" \
+      -library "build/os64/libsherpa-onnx.a" -headers install/include \
+      -library "build/simulator/libsherpa-onnx.a" -headers install/include  \
       -output sherpa-onnx.xcframework
-
-# Copy Headers
-mkdir -p sherpa-onnx.xcframework/Headers
-cp -av install/include/* sherpa-onnx.xcframework/Headers
-
-pushd sherpa-onnx.xcframework/ios-arm64_x86_64-simulator
-ln -s sherpa-onnx.a libsherpa-onnx.a
-popd
-
-pushd sherpa-onnx.xcframework/ios-arm64
-ln -s sherpa-onnx.a libsherpa-onnx.a

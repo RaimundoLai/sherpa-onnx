@@ -7,6 +7,7 @@
 
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
+#include "sherpa-onnx/csrc/text-utils.h"
 
 namespace sherpa_onnx {
 
@@ -22,6 +23,7 @@ void OfflineModelConfig::Register(ParseOptions *po) {
   sense_voice.Register(po);
   moonshine.Register(po);
   dolphin.Register(po);
+  canary.Register(po);
 
   po->Register("telespeech-ctc", &telespeech_ctc,
                "Path to model.onnx for telespeech ctc");
@@ -56,9 +58,37 @@ void OfflineModelConfig::Register(ParseOptions *po) {
 }
 
 bool OfflineModelConfig::Validate() const {
-  if (num_threads < 1) {
-    SHERPA_ONNX_LOGE("num_threads should be > 0. Given %d", num_threads);
-    return false;
+  // For RK NPU, we reinterpret num_threads:
+  //
+  // For RK3588 only
+  // num_threads == 1 -> Select a core randomly
+  // num_threads == 0 -> Use NPU core 0
+  // num_threads == -1 -> Use NPU core 1
+  // num_threads == -2 -> Use NPU core 2
+  // num_threads == -3 -> Use NPU core 0 and core 1
+  // num_threads == -4 -> Use NPU core 0, core 1, and core 2
+  if (provider != "rknn") {
+    if (num_threads < 1) {
+      SHERPA_ONNX_LOGE("num_threads should be > 0. Given %d", num_threads);
+      return false;
+    }
+    if (!sense_voice.model.empty() && (EndsWith(sense_voice.model, ".rknn"))) {
+      SHERPA_ONNX_LOGE(
+          "--provider is %s, which is not rknn, but you pass a rknn model "
+          "filename. model: '%s'",
+          provider.c_str(), sense_voice.model.c_str());
+      return false;
+    }
+  }
+
+  if (provider == "rknn") {
+    if (!sense_voice.model.empty() && (EndsWith(sense_voice.model, ".onnx"))) {
+      SHERPA_ONNX_LOGE(
+          "--provider is rknn, but you pass an onnx model "
+          "filename. model: '%s'",
+          sense_voice.model.c_str());
+      return false;
+    }
   }
 
   if (!FileExists(tokens)) {
@@ -114,6 +144,10 @@ bool OfflineModelConfig::Validate() const {
     return dolphin.Validate();
   }
 
+  if (!canary.encoder.empty()) {
+    return canary.Validate();
+  }
+
   if (!telespeech_ctc.empty() && !FileExists(telespeech_ctc)) {
     SHERPA_ONNX_LOGE("telespeech_ctc: '%s' does not exist",
                      telespeech_ctc.c_str());
@@ -142,6 +176,7 @@ std::string OfflineModelConfig::ToString() const {
   os << "sense_voice=" << sense_voice.ToString() << ", ";
   os << "moonshine=" << moonshine.ToString() << ", ";
   os << "dolphin=" << dolphin.ToString() << ", ";
+  os << "canary=" << canary.ToString() << ", ";
   os << "telespeech_ctc=\"" << telespeech_ctc << "\", ";
   os << "tokens=\"" << tokens << "\", ";
   os << "num_threads=" << num_threads << ", ";

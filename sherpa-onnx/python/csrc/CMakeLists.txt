@@ -9,6 +9,7 @@ set(srcs
   features.cc
   homophone-replacer.cc
   keyword-spotter.cc
+  offline-canary-model-config.cc
   offline-ctc-fst-decoder-config.cc
   offline-dolphin-model-config.cc
   offline-fire-red-asr-model-config.cc
@@ -20,6 +21,10 @@ set(srcs
   offline-punctuation.cc
   offline-recognizer.cc
   offline-sense-voice-model-config.cc
+  offline-source-separation-model-config.cc
+  offline-source-separation-spleeter-model-config.cc
+  offline-source-separation-uvr-model-config.cc
+  offline-source-separation.cc
   offline-speech-denoiser-gtcrn-model-config.cc
   offline-speech-denoiser-model-config.cc
   offline-speech-denoiser.cc
@@ -37,6 +42,7 @@ set(srcs
   online-punctuation.cc
   online-recognizer.cc
   online-stream.cc
+  online-t-one-ctc-model-config.cc
   online-transducer-model-config.cc
   online-wenet-ctc-model-config.cc
   online-zipformer2-ctc-model-config.cc
@@ -46,9 +52,11 @@ set(srcs
   speaker-embedding-extractor.cc
   speaker-embedding-manager.cc
   spoken-language-identification.cc
+  ten-vad-model-config.cc
   tensorrt-config.cc
   vad-model-config.cc
   vad-model.cc
+  version.cc
   voice-activity-detector.cc
   wave-writer.cc
 )
@@ -60,10 +68,12 @@ endif()
 
 if(SHERPA_ONNX_ENABLE_TTS)
   list(APPEND srcs
+    offline-tts-kitten-model-config.cc
     offline-tts-kokoro-model-config.cc
     offline-tts-matcha-model-config.cc
     offline-tts-model-config.cc
     offline-tts-vits-model-config.cc
+    offline-tts-zipvoice-model-config.cc
     offline-tts.cc
   )
 endif()
@@ -106,6 +116,4 @@ if(SHERPA_ONNX_HAS_ALSA)
   endif()
 endif()
 
-install(TARGETS _sherpa_onnx
-  DESTINATION ../
-)
+install(TARGETS _sherpa_onnx DESTINATION lib)

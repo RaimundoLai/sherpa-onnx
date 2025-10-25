@@ -35,19 +35,24 @@ class TtsModel:
     vocoder: str = ""  # for matcha
     voices: str = ""  # for kokoro
     lang: str = ""  # en, zh, fr, de, etc.
+    lang2: str = ""  # en, zh, fr, de, etc.
     rule_fsts: Optional[List[str]] = None
     rule_fars: Optional[List[str]] = None
     data_dir: Optional[str] = None
     dict_dir: Optional[str] = None
     is_char: bool = False
     lang_iso_639_3: str = ""
+    lang_iso_639_3_2: str = ""
     lexicon: str = ""
+    is_kitten: bool = False
 
 
 def convert_lang_to_iso_639_3(models: List[TtsModel]):
     for m in models:
         if m.lang_iso_639_3 == "":
             m.lang_iso_639_3 = Lang(m.lang).pt3
+        if m.lang2 != "":
+            m.lang_iso_639_3_2 = Lang(m.lang2).pt3
 
 
 def get_coqui_models() -> List[TtsModel]:
@@ -102,16 +107,22 @@ def get_piper_models() -> List[TtsModel]:
         #  TtsModel(model_dir="vits-piper-pl_PL-mls_6892-low"),
         TtsModel(model_dir="vits-piper-ar_JO-kareem-low"),
         TtsModel(model_dir="vits-piper-ar_JO-kareem-medium"),
+        TtsModel(model_dir="vits-piper-ar_JO-SA_dii-high"),
+        TtsModel(model_dir="vits-piper-ar_JO-SA_miro-high"),
+        TtsModel(model_dir="vits-piper-ar_JO-SA_miro_V2-high"),
         TtsModel(model_dir="vits-piper-ca_ES-upc_ona-medium"),
         TtsModel(model_dir="vits-piper-ca_ES-upc_ona-x_low"),
         TtsModel(model_dir="vits-piper-ca_ES-upc_pau-x_low"),
-        TtsModel(model_dir="vits-piper-ca_ES-upc_pau-x_low"),
+        TtsModel(model_dir="vits-piper-cs_CZ-jirka-low"),
         TtsModel(model_dir="vits-piper-cs_CZ-jirka-medium"),
+        TtsModel(model_dir="vits-piper-cy_GB-bu_tts-medium"),
         TtsModel(model_dir="vits-piper-cy_GB-gwryw_gogleddol-medium"),
         TtsModel(model_dir="vits-piper-da_DK-talesyntese-medium"),
         TtsModel(model_dir="vits-piper-de_DE-eva_k-x_low"),
         TtsModel(model_dir="vits-piper-de_DE-karlsson-low"),
         TtsModel(model_dir="vits-piper-de_DE-kerstin-low"),
+        TtsModel(model_dir="vits-piper-de_DE-dii-high"),
+        TtsModel(model_dir="vits-piper-de_DE-miro-high"),
         #  TtsModel(model_dir="vits-piper-de_DE-mls-medium"),
         TtsModel(model_dir="vits-piper-de_DE-pavoque-low"),
         TtsModel(model_dir="vits-piper-de_DE-ramona-low"),
@@ -119,6 +130,12 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-de_DE-thorsten-low"),
         TtsModel(model_dir="vits-piper-de_DE-thorsten-medium"),
         TtsModel(model_dir="vits-piper-de_DE-thorsten_emotional-medium"),
+        TtsModel(model_dir="vits-piper-de_DE-glados-high"),
+        TtsModel(model_dir="vits-piper-de_DE-glados-low"),
+        TtsModel(model_dir="vits-piper-de_DE-glados-medium"),
+        TtsModel(model_dir="vits-piper-de_DE-glados_turret-high"),
+        TtsModel(model_dir="vits-piper-de_DE-glados_turret-low"),
+        TtsModel(model_dir="vits-piper-de_DE-glados_turret-medium"),
         TtsModel(model_dir="vits-piper-el_GR-rapunzelina-low"),
         TtsModel(model_dir="vits-piper-en_GB-alan-low"),
         TtsModel(model_dir="vits-piper-en_GB-alan-medium"),
@@ -126,7 +143,9 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-en_GB-aru-medium"),
         TtsModel(model_dir="vits-piper-en_GB-cori-high"),
         TtsModel(model_dir="vits-piper-en_GB-cori-medium"),
+        TtsModel(model_dir="vits-piper-en_GB-dii-high"),
         TtsModel(model_dir="vits-piper-en_GB-jenny_dioco-medium"),
+        TtsModel(model_dir="vits-piper-en_GB-miro-high"),
         TtsModel(model_dir="vits-piper-en_GB-northern_english_male-medium"),
         TtsModel(model_dir="vits-piper-en_GB-semaine-medium"),
         TtsModel(model_dir="vits-piper-en_GB-southern_english_female-low"),
@@ -140,6 +159,7 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-en_US-bryce-medium"),
         TtsModel(model_dir="vits-piper-en_US-danny-low"),
         TtsModel(model_dir="vits-piper-en_US-glados"),
+        TtsModel(model_dir="vits-piper-en_US-glados-high"),
         TtsModel(model_dir="vits-piper-en_US-hfc_female-medium"),
         TtsModel(model_dir="vits-piper-en_US-hfc_male-medium"),
         TtsModel(model_dir="vits-piper-en_US-joe-medium"),
@@ -155,33 +175,50 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-en_US-libritts_r-medium"),
         TtsModel(model_dir="vits-piper-en_US-ljspeech-high"),
         TtsModel(model_dir="vits-piper-en_US-ljspeech-medium"),
+        TtsModel(model_dir="vits-piper-en_US-miro-high"),
         TtsModel(model_dir="vits-piper-en_US-norman-medium"),
         TtsModel(model_dir="vits-piper-en_US-ryan-high"),
         TtsModel(model_dir="vits-piper-en_US-ryan-low"),
         TtsModel(model_dir="vits-piper-en_US-ryan-medium"),
-        TtsModel(model_dir="vits-piper-es-glados-medium"),
+        TtsModel(model_dir="vits-piper-es_AR-daniela-high"),
         TtsModel(model_dir="vits-piper-es_ES-carlfm-x_low"),
         TtsModel(model_dir="vits-piper-es_ES-davefx-medium"),
+        TtsModel(model_dir="vits-piper-es_ES-glados-medium"),
+        TtsModel(model_dir="vits-piper-es_ES-miro-high"),
         TtsModel(model_dir="vits-piper-es_ES-sharvard-medium"),
         TtsModel(model_dir="vits-piper-es_MX-ald-medium"),
         TtsModel(model_dir="vits-piper-es_MX-claude-high"),
         TtsModel(model_dir="vits-piper-fa_IR-amir-medium"),
+        TtsModel(model_dir="vits-piper-fa_IR-ganji-medium"),
+        TtsModel(model_dir="vits-piper-fa_IR-ganji_adabi-medium"),
         TtsModel(model_dir="vits-piper-fa_IR-gyro-medium"),
+        TtsModel(model_dir="vits-piper-fa_IR-reza_ibrahim-medium"),
         TtsModel(model_dir="vits-piper-fa_en-rezahedayatfar-ibrahimwalk-medium"),
         TtsModel(model_dir="vits-piper-fi_FI-harri-low"),
         TtsModel(model_dir="vits-piper-fi_FI-harri-medium"),
         #  TtsModel(model_dir="vits-piper-fr_FR-mls-medium"),
+        TtsModel(model_dir="vits-piper-fr_FR-gilles-low"),
+        TtsModel(model_dir="vits-piper-fr_FR-miro-high"),
         TtsModel(model_dir="vits-piper-fr_FR-siwis-low"),
         TtsModel(model_dir="vits-piper-fr_FR-siwis-medium"),
+        TtsModel(model_dir="vits-piper-fr_FR-tjiho-model1"),
+        TtsModel(model_dir="vits-piper-fr_FR-tjiho-model2"),
+        TtsModel(model_dir="vits-piper-fr_FR-tjiho-model3"),
         TtsModel(model_dir="vits-piper-fr_FR-tom-medium"),
         TtsModel(model_dir="vits-piper-fr_FR-upmc-medium"),
+        TtsModel(model_dir="vits-piper-hi_IN-pratham-medium"),
+        TtsModel(model_dir="vits-piper-hi_IN-priyamvada-medium"),
+        TtsModel(model_dir="vits-piper-hi_IN-rohan-medium"),
         TtsModel(model_dir="vits-piper-hu_HU-anna-medium"),
         TtsModel(model_dir="vits-piper-hu_HU-berta-medium"),
         TtsModel(model_dir="vits-piper-hu_HU-imre-medium"),
+        TtsModel(model_dir="vits-piper-id_ID-news_tts-medium"),
         TtsModel(model_dir="vits-piper-is_IS-bui-medium"),
         TtsModel(model_dir="vits-piper-is_IS-salka-medium"),
         TtsModel(model_dir="vits-piper-is_IS-steinn-medium"),
         TtsModel(model_dir="vits-piper-is_IS-ugla-medium"),
+        TtsModel(model_dir="vits-piper-it_IT-dii-high"),
+        TtsModel(model_dir="vits-piper-it_IT-miro-high"),
         TtsModel(model_dir="vits-piper-it_IT-paola-medium"),
         TtsModel(model_dir="vits-piper-it_IT-riccardo-x_low"),
         TtsModel(model_dir="vits-piper-ka_GE-natia-medium"),
@@ -190,21 +227,34 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-kk_KZ-raya-x_low"),
         TtsModel(model_dir="vits-piper-lv_LV-aivars-medium"),
         TtsModel(model_dir="vits-piper-lb_LU-marylux-medium"),
+        TtsModel(model_dir="vits-piper-ne_NP-chitwan-medium"),
         TtsModel(model_dir="vits-piper-ne_NP-google-medium"),
         TtsModel(model_dir="vits-piper-ne_NP-google-x_low"),
         TtsModel(model_dir="vits-piper-nl_BE-nathalie-medium"),
         TtsModel(model_dir="vits-piper-nl_BE-nathalie-x_low"),
         TtsModel(model_dir="vits-piper-nl_BE-rdh-medium"),
         TtsModel(model_dir="vits-piper-nl_BE-rdh-x_low"),
+        TtsModel(model_dir="vits-piper-nl_NL-miro-high"),
+        TtsModel(model_dir="vits-piper-nl_NL-dii-high"),
         #  TtsModel(model_dir="vits-piper-nl_NL-mls-medium"),
         #  TtsModel(model_dir="vits-piper-nl_NL-mls_5809-low"),
         #  TtsModel(model_dir="vits-piper-nl_NL-mls_7432-low"),
         TtsModel(model_dir="vits-piper-no_NO-talesyntese-medium"),
         TtsModel(model_dir="vits-piper-pl_PL-darkman-medium"),
         TtsModel(model_dir="vits-piper-pl_PL-gosia-medium"),
+        TtsModel(model_dir="vits-piper-pl_PL-jarvis_wg_glos-medium"),
+        TtsModel(model_dir="vits-piper-pl_PL-justyna_wg_glos-medium"),
         TtsModel(model_dir="vits-piper-pl_PL-mc_speech-medium"),
+        TtsModel(model_dir="vits-piper-pl_PL-meski_wg_glos-medium"),
+        TtsModel(model_dir="vits-piper-pl_PL-zenski_wg_glos-medium"),
+        TtsModel(model_dir="vits-piper-pt_BR-cadu-medium"),
+        TtsModel(model_dir="vits-piper-pt_BR-dii-high"),
         TtsModel(model_dir="vits-piper-pt_BR-edresson-low"),
         TtsModel(model_dir="vits-piper-pt_BR-faber-medium"),
+        TtsModel(model_dir="vits-piper-pt_BR-jeff-medium"),
+        TtsModel(model_dir="vits-piper-pt_BR-miro-high"),
+        TtsModel(model_dir="vits-piper-pt_PT-dii-high"),
+        TtsModel(model_dir="vits-piper-pt_PT-miro-high"),
         TtsModel(model_dir="vits-piper-pt_PT-tugao-medium"),
         TtsModel(model_dir="vits-piper-ro_RO-mihai-medium"),
         TtsModel(model_dir="vits-piper-ru_RU-denis-medium"),
@@ -214,6 +264,7 @@ def get_piper_models() -> List[TtsModel]:
         TtsModel(model_dir="vits-piper-sk_SK-lili-medium"),
         TtsModel(model_dir="vits-piper-sl_SI-artur-medium"),
         TtsModel(model_dir="vits-piper-sr_RS-serbski_institut-medium"),
+        TtsModel(model_dir="vits-piper-sv_SE-lisa-medium"),
         TtsModel(model_dir="vits-piper-sv_SE-nst-medium"),
         TtsModel(model_dir="vits-piper-sw_CD-lanfrica-medium"),
         TtsModel(model_dir="vits-piper-tr_TR-dfki-medium"),
@@ -322,6 +373,7 @@ def get_vits_models() -> List[TtsModel]:
             model_dir="vits-melo-tts-zh_en",
             model_name="model.onnx",
             lang="zh",
+            lang2="en",
         ),
         TtsModel(
             model_dir="vits-zh-hf-fanchen-C",
@@ -438,16 +490,19 @@ def get_kokoro_models() -> List[TtsModel]:
             model_dir="kokoro-multi-lang-v1_0",
             model_name="model.onnx",
             lang="en",
+            lang2="zh",
         ),
         TtsModel(
             model_dir="kokoro-multi-lang-v1_1",
             model_name="model.onnx",
             lang="en",
+            lang2="zh",
         ),
         TtsModel(
             model_dir="kokoro-int8-multi-lang-v1_1",
             model_name="model.int8.onnx",
             lang="en",
+            lang2="zh",
         ),
     ]
     for m in multi_lingual_models:
@@ -458,6 +513,32 @@ def get_kokoro_models() -> List[TtsModel]:
         m.rule_fsts = f"{m.model_dir}/phone-zh.fst,{m.model_dir}/date-zh.fst,{m.model_dir}/number-zh.fst"
 
     return english_models + multi_lingual_models
+
+
+def get_kitten_models() -> List[TtsModel]:
+    english_models = [
+        TtsModel(
+            model_dir="kitten-nano-en-v0_1-fp16",
+            model_name="model.fp16.onnx",
+            lang="en",
+        ),
+        TtsModel(
+            model_dir="kitten-nano-en-v0_2-fp16",
+            model_name="model.fp16.onnx",
+            lang="en",
+        ),
+        TtsModel(
+            model_dir="kitten-mini-en-v0_1-fp16",
+            model_name="model.fp16.onnx",
+            lang="en",
+        ),
+    ]
+    for m in english_models:
+        m.data_dir = f"{m.model_dir}/espeak-ng-data"
+        m.voices = "voices.bin"
+        m.is_kitten = True
+
+    return english_models
 
 
 def main():
@@ -473,6 +554,7 @@ def main():
     all_model_list += get_coqui_models()
     all_model_list += get_matcha_models()
     all_model_list += get_kokoro_models()
+    all_model_list += get_kitten_models()
 
     convert_lang_to_iso_639_3(all_model_list)
     print(all_model_list)

@@ -42,8 +42,16 @@ class VocosVocoder::Impl {
         env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config.num_threads, config.provider)),
         allocator_{} {
-    auto buf = ReadFile(config.matcha.vocoder);
-    Init(buf.data(), buf.size());
+    std::vector<char> buffer;
+    if (!config.matcha.vocoder.empty()) {
+      buffer = ReadFile(config.matcha.vocoder);
+    } else if (!config.zipvoice.vocoder.empty()) {
+      buffer = ReadFile(config.zipvoice.vocoder);
+    } else {
+      SHERPA_ONNX_LOGE("No vocoder model provided in the config!");
+      SHERPA_ONNX_EXIT(-1);
+    }
+    Init(buffer.data(), buffer.size());
   }
 
   template <typename Manager>
@@ -52,8 +60,16 @@ class VocosVocoder::Impl {
         env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config.num_threads, config.provider)),
         allocator_{} {
-    auto buf = ReadFile(mgr, config.matcha.vocoder);
-    Init(buf.data(), buf.size());
+    std::vector<char> buffer;
+    if (!config.matcha.vocoder.empty()) {
+      buffer = ReadFile(mgr, config.matcha.vocoder);
+    } else if (!config.zipvoice.vocoder.empty()) {
+      buffer = ReadFile(mgr, config.zipvoice.vocoder);
+    } else {
+      SHERPA_ONNX_LOGE("No vocoder model provided in the config!");
+      SHERPA_ONNX_EXIT(-1);
+    }
+    Init(buffer.data(), buffer.size());
   }
 
   std::vector<float> Run(Ort::Value mel) const {
@@ -142,13 +158,17 @@ class VocosVocoder::Impl {
     }
 
     Ort::AllocatorWithDefaultOptions allocator;  // used in the macro below
-    SHERPA_ONNX_READ_META_DATA(meta_.n_fft, "n_fft");
-    SHERPA_ONNX_READ_META_DATA(meta_.hop_length, "hop_length");
-    SHERPA_ONNX_READ_META_DATA(meta_.win_length, "win_length");
-    SHERPA_ONNX_READ_META_DATA(meta_.center, "center");
-    SHERPA_ONNX_READ_META_DATA(meta_.normalized, "normalized");
-    SHERPA_ONNX_READ_META_DATA_STR(meta_.window_type, "window_type");
-    SHERPA_ONNX_READ_META_DATA_STR(meta_.pad_mode, "pad_mode");
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_.n_fft, "n_fft", 1024);
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_.hop_length, "hop_length",
+                                            256);
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_.win_length, "win_length",
+                                            1024);
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_.center, "center", 1);
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_.normalized, "normalized", 0);
+    SHERPA_ONNX_READ_META_DATA_STR_WITH_DEFAULT(meta_.window_type,
+                                                "window_type", "hann");
+    SHERPA_ONNX_READ_META_DATA_STR_WITH_DEFAULT(meta_.pad_mode, "pad_mode",
+                                                "reflect");
   }
 
  private:

@@ -70,12 +70,13 @@ to install sherpa-onnx and to download non-streaming pre-trained models
 used in this file.
 
 Please visit
-https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
 to download silero_vad.onnx
 
 For instance,
 
-wget https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+
 """
 import argparse
 import sys
@@ -274,13 +275,6 @@ def get_args():
     )
 
     parser.add_argument(
-        "--hr-dict-dir",
-        type=str,
-        default="",
-        help="If not empty, it is the jieba dict directory for homophone replacer",
-    )
-
-    parser.add_argument(
         "--hr-lexicon",
         type=str,
         default="",
@@ -333,7 +327,6 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             decoding_method=args.decoding_method,
             blank_penalty=args.blank_penalty,
             debug=args.debug,
-            hr_dict_dir=args.hr_dict_dir,
             hr_rule_fsts=args.hr_rule_fsts,
             hr_lexicon=args.hr_lexicon,
         )
@@ -358,7 +351,6 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             feature_dim=args.feature_dim,
             decoding_method=args.decoding_method,
             debug=args.debug,
-            hr_dict_dir=args.hr_dict_dir,
             hr_rule_fsts=args.hr_rule_fsts,
             hr_lexicon=args.hr_lexicon,
         )
@@ -379,7 +371,6 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             num_threads=args.num_threads,
             use_itn=True,
             debug=args.debug,
-            hr_dict_dir=args.hr_dict_dir,
             hr_rule_fsts=args.hr_rule_fsts,
             hr_lexicon=args.hr_lexicon,
         )
@@ -403,7 +394,6 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             language=args.whisper_language,
             task=args.whisper_task,
             tail_paddings=args.whisper_tail_paddings,
-            hr_dict_dir=args.hr_dict_dir,
             hr_rule_fsts=args.hr_rule_fsts,
             hr_lexicon=args.hr_lexicon,
         )
@@ -422,7 +412,6 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             num_threads=args.num_threads,
             decoding_method=args.decoding_method,
             debug=args.debug,
-            hr_dict_dir=args.hr_dict_dir,
             hr_rule_fsts=args.hr_rule_fsts,
             hr_lexicon=args.hr_lexicon,
         )

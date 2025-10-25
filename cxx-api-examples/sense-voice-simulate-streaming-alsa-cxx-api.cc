@@ -24,10 +24,9 @@
 #include <iostream>
 #include <mutex>  // NOLINT
 #include <queue>
-#include <thread>
+#include <thread>  // NOLINT
 #include <vector>
 
-#include "portaudio.h"       // NOLINT
 #include "sherpa-display.h"  // NOLINT
 #include "sherpa-onnx/c-api/cxx-api.h"
 #include "sherpa-onnx/csrc/alsa.h"
@@ -172,6 +171,9 @@ as the device_name.
       std::unique_lock<std::mutex> lock(mutex);
       while (samples_queue.empty() && !stop) {
         condition_variable.wait(lock);
+      }
+      if (stop) {
+        break;
       }
 
       const auto &s = samples_queue.front();

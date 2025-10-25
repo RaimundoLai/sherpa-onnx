@@ -6,6 +6,7 @@
 #ifndef SHERPA_ONNX_C_API_CXX_API_H_
 #define SHERPA_ONNX_C_API_CXX_API_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,10 +32,20 @@ struct OnlineZipformer2CtcModelConfig {
   std::string model;
 };
 
+struct OnlineNemoCtcModelConfig {
+  std::string model;
+};
+
+struct OnlineToneCtcModelConfig {
+  std::string model;
+};
+
 struct OnlineModelConfig {
   OnlineTransducerModelConfig transducer;
   OnlineParaformerModelConfig paraformer;
   OnlineZipformer2CtcModelConfig zipformer2_ctc;
+  OnlineNemoCtcModelConfig nemo_ctc;
+  OnlineToneCtcModelConfig t_one_ctc;
   std::string tokens;
   int32_t num_threads = 1;
   std::string provider = "cpu";
@@ -56,7 +67,7 @@ struct OnlineCtcFstDecoderConfig {
 };
 
 struct HomophoneReplacerConfig {
-  std::string dict_dir;
+  std::string dict_dir;  // unused
   std::string lexicon;
   std::string rule_fsts;
 };
@@ -222,6 +233,14 @@ struct SHERPA_ONNX_API OfflineWhisperModelConfig {
   int32_t tail_paddings = -1;
 };
 
+struct SHERPA_ONNX_API OfflineCanaryModelConfig {
+  std::string encoder;
+  std::string decoder;
+  std::string src_lang;
+  std::string tgt_lang;
+  bool use_pnc = true;
+};
+
 struct SHERPA_ONNX_API OfflineFireRedAsrModelConfig {
   std::string encoder;
   std::string decoder;
@@ -238,6 +257,14 @@ struct SHERPA_ONNX_API OfflineSenseVoiceModelConfig {
 };
 
 struct SHERPA_ONNX_API OfflineDolphinModelConfig {
+  std::string model;
+};
+
+struct SHERPA_ONNX_API OfflineZipformerCtcModelConfig {
+  std::string model;
+};
+
+struct SHERPA_ONNX_API OfflineWenetCtcModelConfig {
   std::string model;
 };
 
@@ -267,6 +294,9 @@ struct SHERPA_ONNX_API OfflineModelConfig {
   OfflineMoonshineModelConfig moonshine;
   OfflineFireRedAsrModelConfig fire_red_asr;
   OfflineDolphinModelConfig dolphin;
+  OfflineZipformerCtcModelConfig zipformer_ctc;
+  OfflineCanaryModelConfig canary;
+  OfflineWenetCtcModelConfig wenet_ctc;
 };
 
 struct SHERPA_ONNX_API OfflineLMConfig {
@@ -299,6 +329,9 @@ struct SHERPA_ONNX_API OfflineRecognizerResult {
   std::string lang;
   std::string emotion;
   std::string event;
+
+  // non-empty only for TDT models
+  std::vector<float> durations;
 };
 
 class SHERPA_ONNX_API OfflineStream
@@ -329,6 +362,13 @@ class SHERPA_ONNX_API OfflineRecognizer
 
   OfflineRecognizerResult GetResult(const OfflineStream *s) const;
 
+  // For unreal engine, please use this function
+  // See also https://github.com/k2-fsa/sherpa-onnx/discussions/1960
+  std::shared_ptr<OfflineRecognizerResult> GetResultPtr(
+      const OfflineStream *s) const;
+
+  void SetConfig(const OfflineRecognizerConfig &config) const;
+
  private:
   explicit OfflineRecognizer(const SherpaOnnxOfflineRecognizer *p);
 };
@@ -341,7 +381,7 @@ struct OfflineTtsVitsModelConfig {
   std::string lexicon;
   std::string tokens;
   std::string data_dir;
-  std::string dict_dir;
+  std::string dict_dir;  // unused
 
   float noise_scale = 0.667;
   float noise_scale_w = 0.8;
@@ -354,7 +394,7 @@ struct OfflineTtsMatchaModelConfig {
   std::string lexicon;
   std::string tokens;
   std::string data_dir;
-  std::string dict_dir;
+  std::string dict_dir;  // unused
 
   float noise_scale = 0.667;
   float length_scale = 1.0;  // < 1, faster in speed; > 1, slower in speed
@@ -365,16 +405,43 @@ struct OfflineTtsKokoroModelConfig {
   std::string voices;
   std::string tokens;
   std::string data_dir;
-  std::string dict_dir;
+  std::string dict_dir;  // unused
   std::string lexicon;
+  std::string lang;
 
   float length_scale = 1.0;  // < 1, faster in speed; > 1, slower in speed
+};
+
+struct OfflineTtsKittenModelConfig {
+  std::string model;
+  std::string voices;
+  std::string tokens;
+  std::string data_dir;
+
+  float length_scale = 1.0;  // < 1, faster in speed; > 1, slower in speed
+};
+
+struct OfflineTtsZipvoiceModelConfig {
+  std::string tokens;
+  std::string text_model;
+  std::string flow_matching_model;
+  std::string vocoder;
+  std::string data_dir;
+  std::string pinyin_dict;
+
+  float feat_scale = 0.1;
+  float t_shift = 0.5;
+  float target_rms = 0.1;
+  float guidance_scale = 1.0;
 };
 
 struct OfflineTtsModelConfig {
   OfflineTtsVitsModelConfig vits;
   OfflineTtsMatchaModelConfig matcha;
   OfflineTtsKokoroModelConfig kokoro;
+  OfflineTtsKittenModelConfig kitten;
+  OfflineTtsZipvoiceModelConfig zipvoice;
+
   int32_t num_threads = 1;
   bool debug = false;
   std::string provider = "cpu";
@@ -426,6 +493,13 @@ class SHERPA_ONNX_API OfflineTts
                           float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
                           OfflineTtsCallback callback = nullptr,
                           void *arg = nullptr) const;
+
+  // Like Generate, but return a smart pointer.
+  //
+  // See also https://github.com/k2-fsa/sherpa-onnx/issues/2347
+  std::shared_ptr<GeneratedAudio> Generate2(
+      const std::string &text, int32_t sid = 0, float speed = 1.0,
+      OfflineTtsCallback callback = nullptr, void *arg = nullptr) const;
 
  private:
   explicit OfflineTts(const SherpaOnnxOfflineTts *p);
@@ -527,8 +601,18 @@ struct SileroVadModelConfig {
   float max_speech_duration = 20;
 };
 
+struct TenVadModelConfig {
+  std::string model;
+  float threshold = 0.5;
+  float min_silence_duration = 0.5;
+  float min_speech_duration = 0.25;
+  int32_t window_size = 256;
+  float max_speech_duration = 20;
+};
+
 struct VadModelConfig {
   SileroVadModelConfig silero_vad;
+  TenVadModelConfig ten_vad;
 
   int32_t sample_rate = 16000;
   int32_t num_threads = 1;
@@ -584,6 +668,10 @@ class SHERPA_ONNX_API VoiceActivityDetector
 
   SpeechSegment Front() const;
 
+  // For unreal engine, please use this function
+  // See also https://github.com/k2-fsa/sherpa-onnx/discussions/1960
+  std::shared_ptr<SpeechSegment> FrontPtr() const;
+
   void Reset() const;
 
   void Flush() const;
@@ -612,6 +700,87 @@ class SHERPA_ONNX_API LinearResampler
 
  private:
   explicit LinearResampler(const SherpaOnnxLinearResampler *p);
+};
+
+SHERPA_ONNX_API std::string GetVersionStr();
+SHERPA_ONNX_API std::string GetGitSha1();
+SHERPA_ONNX_API std::string GetGitDate();
+SHERPA_ONNX_API bool FileExists(const std::string &filename);
+
+// ============================================================================
+// Offline Punctuation
+// ============================================================================
+struct OfflinePunctuationModelConfig {
+  std::string ct_transformer;
+  int32_t num_threads = 1;
+  bool debug = false;
+  std::string provider = "cpu";
+};
+
+struct OfflinePunctuationConfig {
+  OfflinePunctuationModelConfig model;
+};
+
+class SHERPA_ONNX_API OfflinePunctuation
+    : public MoveOnly<OfflinePunctuation, SherpaOnnxOfflinePunctuation> {
+ public:
+  static OfflinePunctuation Create(const OfflinePunctuationConfig &config);
+
+  void Destroy(const SherpaOnnxOfflinePunctuation *p) const;
+
+  // Add punctuations to the input text and return it.
+  std::string AddPunctuation(const std::string &text) const;
+
+ private:
+  explicit OfflinePunctuation(const SherpaOnnxOfflinePunctuation *p);
+};
+
+// ============================================================================
+// Audio tagging
+// ============================================================================
+struct OfflineZipformerAudioTaggingModelConfig {
+  std::string model;
+};
+
+struct AudioTaggingModelConfig {
+  OfflineZipformerAudioTaggingModelConfig zipformer;
+  std::string ced;
+  int32_t num_threads = 1;
+  bool debug = false;  // true to print debug information of the model
+  std::string provider = "cpu";
+};
+
+struct AudioTaggingConfig {
+  AudioTaggingModelConfig model;
+  std::string labels;
+  int32_t top_k = 5;
+};
+
+struct AudioEvent {
+  std::string name;
+  int32_t index;
+  float prob;
+};
+
+class SHERPA_ONNX_API AudioTagging
+    : public MoveOnly<AudioTagging, SherpaOnnxAudioTagging> {
+ public:
+  static AudioTagging Create(const AudioTaggingConfig &config);
+
+  void Destroy(const SherpaOnnxAudioTagging *p) const;
+
+  OfflineStream CreateStream() const;
+  // when top_k is -1, it uses the top_k from config.top_k
+  // when top_k is > 0, config.top_k is ignored
+  std::vector<AudioEvent> Compute(const OfflineStream *s, int32_t top_k = -1);
+
+  // For unreal engine, please use this function
+  // See also https://github.com/k2-fsa/sherpa-onnx/discussions/1960
+  std::shared_ptr<std::vector<AudioEvent>> ComputePtr(const OfflineStream *s,
+                                                      int32_t top_k = -1);
+
+ private:
+  explicit AudioTagging(const SherpaOnnxAudioTagging *p);
 };
 
 }  // namespace sherpa_onnx::cxx

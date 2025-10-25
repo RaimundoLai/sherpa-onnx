@@ -23,6 +23,9 @@ object TtsEngine {
     // cmn for Mandarin
     var lang: String? = null
 
+    // if a model supports two languages, set also lang2
+    var lang2: String? = null
+
 
     val speedState: MutableState<Float> = mutableFloatStateOf(1.0F)
     val speakerIdState: MutableState<Int> = mutableIntStateOf(0)
@@ -48,8 +51,8 @@ object TtsEngine {
     private var ruleFars: String? = null
     private var lexicon: String? = null
     private var dataDir: String? = null
-    private var dictDir: String? = null
     private var assets: AssetManager? = null
+    private var isKitten = false
 
     init {
         // The purpose of such a design is to make the CI test easier
@@ -74,8 +77,8 @@ object TtsEngine {
         ruleFars = null
         lexicon = null
         dataDir = null
-        dictDir = null
         lang = null
+        lang2 = null
 
         // Please enable one and only one of the examples below
 
@@ -107,7 +110,6 @@ object TtsEngine {
         // modelDir = "vits-zh-hf-fanchen-C"
         // modelName = "vits-zh-hf-fanchen-C.onnx"
         // lexicon = "lexicon.txt"
-        // dictDir = "vits-zh-hf-fanchen-C/dict"
         // lang = "zho"
 
         // Example 5:
@@ -123,8 +125,8 @@ object TtsEngine {
         // modelDir = "vits-melo-tts-zh_en"
         // modelName = "model.onnx"
         // lexicon = "lexicon.txt"
-        // dictDir = "vits-melo-tts-zh_en/dict"
         // lang = "zho"
+        // lang2 = "eng"
 
         // Example 7
         // matcha-icefall-zh-baker
@@ -133,7 +135,6 @@ object TtsEngine {
         // acousticModelName = "model-steps-3.onnx"
         // vocoder = "vocos-22khz-univ.onnx"
         // lexicon = "lexicon.txt"
-        // dictDir = "matcha-icefall-zh-baker/dict"
         // lang = "zho"
 
         // Example 8
@@ -159,13 +160,22 @@ object TtsEngine {
         // modelName = "model.onnx"
         // voices = "voices.bin"
         // dataDir = "kokoro-multi-lang-v1_0/espeak-ng-data"
-        // dictDir = "kokoro-multi-lang-v1_0/dict"
         // lexicon = "kokoro-multi-lang-v1_0/lexicon-us-en.txt,kokoro-multi-lang-v1_0/lexicon-zh.txt"
         // lang = "eng"
+        // lang2 = "zho"
         // ruleFsts = "$modelDir/phone-zh.fst,$modelDir/date-zh.fst,$modelDir/number-zh.fst"
         //
         // This model supports many languages, e.g., English, Chinese, etc.
         // We set lang to eng here.
+
+        // Example 11
+        // kitten-nano-en-v0_1-fp16
+        // modelDir = "kitten-nano-en-v0_1-fp16"
+        // modelName = "model.fp16.onnx"
+        // voices = "voices.bin"
+        // dataDir = "kitten-nano-en-v0_1-fp16/espeak-ng-data"
+        // lang = "eng"
+        // isKitten = true
     }
 
     fun createTts(context: Context) {
@@ -183,14 +193,6 @@ object TtsEngine {
             dataDir = "$newDir/$dataDir"
         }
 
-        if (dictDir != null) {
-            val newDir = copyDataDir(context, dictDir!!)
-            dictDir = "$newDir/$dictDir"
-            if (ruleFsts == null) {
-                ruleFsts = "$modelDir/phone.fst,$modelDir/date.fst,$modelDir/number.fst"
-            }
-        }
-
         val config = getOfflineTtsConfig(
             modelDir = modelDir!!,
             modelName = modelName ?: "",
@@ -199,9 +201,10 @@ object TtsEngine {
             voices = voices ?: "",
             lexicon = lexicon ?: "",
             dataDir = dataDir ?: "",
-            dictDir = dictDir ?: "",
+            dictDir = "",
             ruleFsts = ruleFsts ?: "",
-            ruleFars = ruleFars ?: ""
+            ruleFars = ruleFars ?: "",
+            isKitten = isKitten,
         )
 
         speed = PreferenceHelper(context).getSpeed()

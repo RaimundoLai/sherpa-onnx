@@ -32,6 +32,12 @@ void PybindFastClustering(py::module *m) {
           "__call__",
           [](const PyClass &self,
              py::array_t<float> features) -> std::vector<int32_t> {
+            if (!(features.flags() & py::array::c_style)) {
+              throw py::value_error(
+                  "input features should be contiguous. Please use "
+                  "np.ascontiguousarray(features)");
+            }
+
             int num_dim = features.ndim();
             if (num_dim != 2) {
               std::ostringstream os;

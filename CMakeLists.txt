@@ -14,7 +14,7 @@ project(sherpa-onnx)
 # Remember to update
 # ./CHANGELOG.md
 # ./new-release.sh
-set(SHERPA_ONNX_VERSION "1.12.0")
+set(SHERPA_ONNX_VERSION "1.12.15")
 
 # Disable warning about
 #
@@ -141,6 +141,12 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL OHOS)
   set(CMAKE_CXX_FLAGS "-Wno-unused-command-line-argument ${CMAKE_CXX_FLAGS}")
   set(CMAKE_C_FLAGS "-Wno-unused-command-line-argument ${CMAKE_C_FLAGS}")
+endif()
+
+if(ANDROID)
+  # see https://github.com/microsoft/onnxruntime/pull/22076
+  # https://github.com/k2-fsa/sherpa-onnx/issues/2413
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
 endif()
 
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
@@ -304,7 +310,7 @@ if(UNIX AND NOT APPLE AND NOT SHERPA_ONNX_ENABLE_WASM AND NOT CMAKE_SYSTEM_NAME 
 Could not find alsa/asoundlib.h !
 We won't build sherpa-onnx-alsa
 To fix that, please do:
-  (1) sudo apt-get install alsa-utils libasound2-dev
+  (1) sudo apt-get install alsa-utils libasound2-dev pkg-config
   (2) rm -rf build
   (3) re-try
   ")
@@ -347,6 +353,8 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+include(show-info)
+
 if(SHERPA_ONNX_ENABLE_WASM)
   # Enable it for debugging in case there is something wrong.
   # string(APPEND CMAKE_CXX_FLAGS " -g4 -s ASSERTIONS=2 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=1 ")
@@ -360,7 +368,6 @@ if(NOT BUILD_SHARED_LIBS AND CMAKE_SYSTEM_NAME STREQUAL Linux)
     message(STATUS "Link libstdc++ dynamically")
   endif()
 endif()
-
 include(kaldi-native-fbank)
 include(kaldi-decoder)
 include(onnxruntime)
@@ -388,8 +395,9 @@ if(SHERPA_ONNX_ENABLE_WEBSOCKET)
   include(asio)
 endif()
 
-include(cppjieba) # It is a header-only C++ library
-
+if(SHERPA_ONNX_ENABLE_TTS)
+  include(cppinyin)
+endif()
 if(SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION)
   include(hclust-cpp)
 endif()
@@ -416,7 +424,7 @@ if(SHERPA_ONNX_ENABLE_SANITIZER)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flags}")
   endif()
 
-  set(CMAKE_EXECUTBLE_LINKER_FLAGS "${CMAKE_EXECUTBLE_LINKER_FLAGS} ${flags}")
+  set(CMAKE_EXECUTABLE_LINKER_FLAGS "${CMAKE_EXECUTABLE_LINKER_FLAGS} ${flags}")
 
   add_compile_options(-fno-omit-frame-pointer)
 endif()

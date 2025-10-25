@@ -28,6 +28,13 @@ struct OfflineTtsKokoroModelConfig {
   // speed = 1 / length_scale
   float length_scale = 1.0;
 
+  // Used only for Kokoro >= 1.0.
+  //
+  // If it is not empty, meta_data.voice is ignored.
+  // Example values: es (Spanish), fr (French), pt (Portuguese)
+  // See https://hf-mirror.com/hexgrad/Kokoro-82M/blob/main/VOICES.md
+  std::string lang;
+
   OfflineTtsKokoroModelConfig() = default;
 
   OfflineTtsKokoroModelConfig(const std::string &model,
@@ -36,7 +43,8 @@ struct OfflineTtsKokoroModelConfig {
                               const std::string &lexicon,
                               const std::string &data_dir,
                               const std::string &dict_dir, float length_scale,
-                              const std::string &g2p_model)
+                              const std::string &g2p_model,
+                              const std::string &lang)
       : model(model),
         voices(voices),
         tokens(tokens),
@@ -44,8 +52,8 @@ struct OfflineTtsKokoroModelConfig {
         data_dir(data_dir),
         dict_dir(dict_dir),
         length_scale(length_scale),
-        g2p_model(g2p_model)
-         {}
+        g2p_model(g2p_model),
+        lang(lang) {}
 
   void Register(ParseOptions *po);
   bool Validate() const;

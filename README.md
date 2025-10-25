@@ -1,30 +1,31 @@
 ### Supported functions
 
-|Speech recognition| Speech synthesis |
-|------------------|------------------|
-|   ✔️              |         ✔️        |
+|Speech recognition| [Speech synthesis][tts-url] | [Source separation][ss-url] |
+|------------------|------------------|-------------------|
+|   ✔️              |         ✔️        |       ✔️           |
 
-|Speaker identification| Speaker diarization | Speaker verification |
+|Speaker identification| [Speaker diarization][sd-url] | Speaker verification |
 |----------------------|-------------------- |------------------------|
 |   ✔️                  |         ✔️           |            ✔️           |
 
-| Spoken Language identification | Audio tagging | Voice activity detection |
+| [Spoken Language identification][slid-url] | [Audio tagging][at-url] | [Voice activity detection][vad-url] |
 |--------------------------------|---------------|--------------------------|
 |                 ✔️              |          ✔️    |                ✔️         |
 
-| Keyword spotting | Add punctuation | Speech enhancement |
+| [Keyword spotting][kws-url] | [Add punctuation][punct-url] | [Speech enhancement][se-url] |
 |------------------|-----------------|--------------------|
 |     ✔️            |       ✔️         |      ✔️             |
+
 
 ### Supported platforms
 
 |Architecture| Android | iOS     | Windows    | macOS | linux | HarmonyOS |
 |------------|---------|---------|------------|-------|-------|-----------|
-|   x64      |  ✔️      |         |   ✔️        | ✔️     |  ✔️    |   ✔️       |
-|   x86      |  ✔️      |         |   ✔️        |       |       |           |
-|   arm64    |  ✔️      | ✔️       |   ✔️        | ✔️     |  ✔️    |   ✔️       |
-|   arm32    |  ✔️      |         |            |       |  ✔️    |   ✔️       |
-|   riscv64  |         |         |            |       |  ✔️    |           |
+|   x64      |  ✔️      |         |   ✔️      | ✔️    |  ✔️    |   ✔️   |
+|   x86      |  ✔️      |         |   ✔️      |       |        |        |
+|   arm64    |  ✔️      | ✔️      |   ✔️      | ✔️    |  ✔️    |   ✔️   |
+|   arm32    |  ✔️      |         |           |       |  ✔️    |   ✔️   |
+|   riscv64  |          |         |           |       |  ✔️    |        |
 
 ### Supported programming languages
 
@@ -44,6 +45,9 @@ For Rust support, please see [sherpa-rs][sherpa-rs]
 
 It also supports WebAssembly.
 
+[Join our discord](https://discord.gg/fJdxzg2VbG)
+
+
 ## Introduction
 
 This repository supports running the following functions **locally**
@@ -56,11 +60,13 @@ This repository supports running the following functions **locally**
   - Spoken language identification
   - Audio tagging
   - VAD (e.g., [silero-vad][silero-vad])
+  - Speech enhancement (e.g., [gtcrn][gtcrn])
   - Keyword spotting
+  - Source separation (e.g., [spleeter][spleeter], [UVR][UVR])
 
 on the following platforms and operating systems:
 
-  - x86, ``x86_64``, 32-bit ARM, 64-bit ARM (arm64, aarch64), RISC-V (riscv64), **RK NPU**
+  - x86, ``x86_64``, 32-bit ARM, 64-bit ARM (arm64, aarch64), RISC-V (riscv64), **RK NPU**, **Ascend NPU**
   - Linux, macOS, Windows, openKylin
   - Android, WearOS
   - iOS
@@ -75,6 +81,7 @@ on the following platforms and operating systems:
   - [VisionFive 2][VisionFive 2]
   - [旭日X3派][旭日X3派]
   - [爱芯派][爱芯派]
+  - [RK3588][RK3588]
   - etc
 
 with the following APIs
@@ -90,15 +97,16 @@ with the following APIs
 <summary>You can visit the following Huggingface spaces to try sherpa-onnx without
 installing anything. All you need is a browser.</summary>
 
-| Description                                           | URL                                     |
-|-------------------------------------------------------|-----------------------------------------|
-| Speaker diarization                                   | [Click me][hf-space-speaker-diarization]|
-| Speech recognition                                    | [Click me][hf-space-asr]                |
-| Speech recognition with [Whisper][Whisper]            | [Click me][hf-space-asr-whisper]        |
-| Speech synthesis                                      | [Click me][hf-space-tts]                |
-| Generate subtitles                                    | [Click me][hf-space-subtitle]           |
-| Audio tagging                                         | [Click me][hf-space-audio-tagging]      |
-| Spoken language identification with [Whisper][Whisper]| [Click me][hf-space-slid-whisper]       |
+| Description                                           | URL                                     | 中国镜像                               |
+|-------------------------------------------------------|-----------------------------------------|----------------------------------------|
+| Speaker diarization                                   | [Click me][hf-space-speaker-diarization]| [镜像][hf-space-speaker-diarization-cn]|
+| Speech recognition                                    | [Click me][hf-space-asr]                | [镜像][hf-space-asr-cn]                |
+| Speech recognition with [Whisper][Whisper]            | [Click me][hf-space-asr-whisper]        | [镜像][hf-space-asr-whisper-cn]        |
+| Speech synthesis                                      | [Click me][hf-space-tts]                | [镜像][hf-space-tts-cn]                |
+| Generate subtitles                                    | [Click me][hf-space-subtitle]           | [镜像][hf-space-subtitle-cn]           |
+| Audio tagging                                         | [Click me][hf-space-audio-tagging]      | [镜像][hf-space-audio-tagging-cn]      |
+| Source separation                                     | [Click me][hf-space-source-separation]  | [镜像][hf-space-source-separation-cn]  |
+| Spoken language identification with [Whisper][Whisper]| [Click me][hf-space-slid-whisper]       | [镜像][hf-space-slid-whisper-cn]       |
 
 We also have spaces built using WebAssembly. They are listed below:
 
@@ -109,6 +117,7 @@ We also have spaces built using WebAssembly. They are listed below:
 |Real-time speech recognition (Chinese + English) with Paraformer                          |[Click me][wasm-hf-streaming-asr-zh-en-paraformer]| [地址][wasm-ms-streaming-asr-zh-en-paraformer]|
 |Real-time speech recognition (Chinese + English + Cantonese) with [Paraformer-large][Paraformer-large]|[Click me][wasm-hf-streaming-asr-zh-en-yue-paraformer]| [地址][wasm-ms-streaming-asr-zh-en-yue-paraformer]|
 |Real-time speech recognition (English) |[Click me][wasm-hf-streaming-asr-en-zipformer]    |[地址][wasm-ms-streaming-asr-en-zipformer]|
+|VAD + speech recognition (Chinese) with [Zipformer CTC](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-ctc/icefall/zipformer.html#sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03-chinese)|[Click me][wasm-hf-vad-asr-zh-zipformer-ctc-07-03]| [地址][wasm-ms-vad-asr-zh-zipformer-ctc-07-03]|
 |VAD + speech recognition (Chinese + English + Korean + Japanese + Cantonese) with [SenseVoice][SenseVoice]|[Click me][wasm-hf-vad-asr-zh-en-ko-ja-yue-sense-voice]| [地址][wasm-ms-vad-asr-zh-en-ko-ja-yue-sense-voice]|
 |VAD + speech recognition (English) with [Whisper][Whisper] tiny.en|[Click me][wasm-hf-vad-asr-en-whisper-tiny-en]| [地址][wasm-ms-vad-asr-en-whisper-tiny-en]|
 |VAD + speech recognition (English) with [Moonshine tiny][Moonshine tiny]|[Click me][wasm-hf-vad-asr-en-moonshine-tiny-en]| [地址][wasm-ms-vad-asr-en-moonshine-tiny-en]|
@@ -136,6 +145,7 @@ We also have spaces built using WebAssembly. They are listed below:
 |----------------------------------------|------------------------------------|-----------------------------------|
 | Speaker diarization                    | [Address][apk-speaker-diarization] | [点此][apk-speaker-diarization-cn]|
 | Streaming speech recognition           | [Address][apk-streaming-asr]       | [点此][apk-streaming-asr-cn]      |
+| Simulated-streaming speech recognition | [Address][apk-simula-streaming-asr]| [点此][apk-simula-streaming-asr-cn]|
 | Text-to-speech                         | [Address][apk-tts]                 | [点此][apk-tts-cn]                |
 | Voice activity detection (VAD)         | [Address][apk-vad]                 | [点此][apk-vad-cn]                |
 | VAD + non-streaming speech recognition | [Address][apk-vad-asr]             | [点此][apk-vad-asr-cn]            |
@@ -200,6 +210,7 @@ We also have spaces built using WebAssembly. They are listed below:
 | Punctuation                                 | [Address][punct-models]                                                               |
 | Speaker segmentation                        | [Address][speaker-segmentation-models]                                                |
 | Speech enhancement                          | [Address][speech-enhancement-models]                                                  |
+| Source separation                           | [Address][source-separation-models]                                                  |
 
 </details>
 
@@ -244,8 +255,10 @@ for more models. The following table lists only **SOME** of them.
 
 |Name | Supported Languages| Description|
 |-----|-----|----|
+|[sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html#sherpa-onnx-nemo-parakeet-tdt-0-6b-v2-int8-english)| English | It is converted from <https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2>|
 |[Whisper tiny.en](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2)|English| See [also](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/whisper/tiny.en.html)|
 |[Moonshine tiny][Moonshine tiny]|English|See [also](https://github.com/usefulsensors/moonshine)|
+|[sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-ctc/icefall/zipformer.html#sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03-chinese)|Chinese| A Zipformer CTC model|
 |[sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17][sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17]|Chinese, Cantonese, English, Korean, Japanese| 支持多种中文方言. See [also](https://k2-fsa.github.io/sherpa/onnx/sense-voice/index.html)|
 |[sherpa-onnx-paraformer-zh-2024-03-09][sherpa-onnx-paraformer-zh-2024-03-09]|Chinese, English| 也支持多种中文方言. See [also](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-paraformer/paraformer-models.html#csukuangfj-sherpa-onnx-paraformer-zh-2024-03-09-chinese-english)|
 |[sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01][sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01]|Japanese|See [also](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/zipformer-transducer-models.html#sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01-japanese)|
@@ -270,6 +283,20 @@ https://k2-fsa.github.io/sherpa/social-groups.html
 for 新一代 Kaldi **微信交流群** and **QQ 交流群**.
 
 ## Projects using sherpa-onnx
+
+### [BreezeApp](https://github.com/mtkresearch/BreezeApp) from [MediaTek Research](https://github.com/mtkresearch)
+
+> BreezeAPP is a mobile AI application developed for both Android and iOS platforms.
+> Users can download it directly from the App Store and enjoy a variety of features
+> offline, including speech-to-text, text-to-speech, text-based chatbot interactions,
+> and image question-answering
+
+  - [Download APK for BreezeAPP](https://huggingface.co/MediaTek-Research/BreezeApp/resolve/main/BreezeApp.apk)
+  - [APK 中国镜像](https://hf-mirror.com/MediaTek-Research/BreezeApp/blob/main/BreezeApp.apk)
+
+| 1 | 2 | 3 |
+|---|---|---|
+|![](https://github.com/user-attachments/assets/1cdbc057-b893-4de6-9e9c-f1d7dfd1d992)|![](https://github.com/user-attachments/assets/d77cd98e-b057-442f-860d-d5befd5c769b)|![](https://github.com/user-attachments/assets/57e546bf-3d39-45b9-b392-b48ca4fb3c58)|
 
 ### [Open-LLM-VTuber](https://github.com/t41372/Open-LLM-VTuber)
 
@@ -346,13 +373,51 @@ Enable custom wake word for XiaoAi Speakers. 让小爱音箱支持自定义唤�
 
 Video demo in Chinese: [小爱同学启动～˶╹ꇴ╹˶！](https://www.bilibili.com/video/BV1YfVUz5EMj)
 
+### [C++ WebSocket ASR Server](https://github.com/mawwalker/stt-server)
+
+It provides a WebSocket server based on C++ for ASR using sherpa-onnx.
+
+### [Go WebSocket Server](https://github.com/bbeyondllove/asr_server)
+
+It provides a WebSocket server based on the Go programming language for sherpa-onnx.
+
 ### [Making robot Paimon, Ep10 "The AI Part 1"](https://www.youtube.com/watch?v=KxPKkwxGWZs)
 
 It is a [YouTube video](https://www.youtube.com/watch?v=KxPKkwxGWZs),
 showing how the author tried to use AI so he can have a conversation with Paimon.
 
 It uses sherpa-onnx for speech-to-text and text-to-speech.
-![](https://private-user-images.githubusercontent.com/5284924/442579664-f6eea2d5-1807-42cb-9160-be8da2971e1f.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDcwMjI5NjIsIm5iZiI6MTc0NzAyMjY2MiwicGF0aCI6Ii81Mjg0OTI0LzQ0MjU3OTY2NC1mNmVlYTJkNS0xODA3LTQyY2ItOTE2MC1iZThkYTI5NzFlMWYucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDUxMiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTA1MTJUMDQwNDIyWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9ODAyMDllYjNmMGU0ZjNlODI3N2RkZjdiYjU2MmY4YzQwNGJjZjM4MGZmNjk0OWRmNmYzMjJhYWIzMDRiMWNiYSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.WP-v8oKPqQ-s487-eUU2Z4quOfWbwDJQJok89NfkTf4)
+|1|
+|---|
+|![](https://github.com/user-attachments/assets/f6eea2d5-1807-42cb-9160-be8da2971e1f)|
+
+### [TtsReader - Desktop application](https://github.com/ys-pro-duction/TtsReader)
+
+A desktop text-to-speech application built using Kotlin Multiplatform.
+
+### [MentraOS](https://github.com/Mentra-Community/MentraOS)
+
+> Smart glasses OS, with dozens of built-in apps. Users get AI assistant, notifications,
+> translation, screen mirror, captions, and more. Devs get to write 1 app that runs on
+> any pair of smart glasses.
+
+It uses sherpa-onnx for real-time speech recognition on iOS and Android devices.
+See also <https://github.com/Mentra-Community/MentraOS/pull/861>
+
+It uses Swift for iOS and Java for Android.
+
+### [flet_sherpa_onnx](https://github.com/SamYuan1990/flet_sherpa_onnx)
+
+Flet ASR/STT component based on sherpa-onnx.
+Example [a chat box agent](https://github.com/SamYuan1990/i18n-agent-action)
+
+### [elderly-companion](https://github.com/SearocIsMe/elderly-companion)
+
+It uses sherpa-onnx's Python API for real-time speech recognition in ROS2 with RK NPU.
+
+### [achatbot-go](https://github.com/ai-bot-pro/achatbot-go)
+
+a multimodal chatbot based on go with sherpa-onnx's speech lib api.
 
 [sherpa-rs]: https://github.com/thewh1teagle/sherpa-rs
 [silero-vad]: https://github.com/snakers4/silero-vad
@@ -363,13 +428,22 @@ It uses sherpa-onnx for speech-to-text and text-to-speech.
 [旭日X3派]: https://developer.horizon.ai/api/v1/fileData/documents_pi/index.html
 [爱芯派]: https://wiki.sipeed.com/hardware/zh/maixIII/ax-pi/axpi.html
 [hf-space-speaker-diarization]: https://huggingface.co/spaces/k2-fsa/speaker-diarization
+[hf-space-speaker-diarization-cn]: https://hf.qhduan.com/spaces/k2-fsa/speaker-diarization
 [hf-space-asr]: https://huggingface.co/spaces/k2-fsa/automatic-speech-recognition
+[hf-space-asr-cn]: https://hf.qhduan.com/spaces/k2-fsa/automatic-speech-recognition
 [Whisper]: https://github.com/openai/whisper
 [hf-space-asr-whisper]: https://huggingface.co/spaces/k2-fsa/automatic-speech-recognition-with-whisper
+[hf-space-asr-whisper-cn]: https://hf.qhduan.com/spaces/k2-fsa/automatic-speech-recognition-with-whisper
 [hf-space-tts]: https://huggingface.co/spaces/k2-fsa/text-to-speech
+[hf-space-tts-cn]: https://hf.qhduan.com/spaces/k2-fsa/text-to-speech
 [hf-space-subtitle]: https://huggingface.co/spaces/k2-fsa/generate-subtitles-for-videos
+[hf-space-subtitle-cn]: https://hf.qhduan.com/spaces/k2-fsa/generate-subtitles-for-videos
 [hf-space-audio-tagging]: https://huggingface.co/spaces/k2-fsa/audio-tagging
+[hf-space-audio-tagging-cn]: https://hf.qhduan.com/spaces/k2-fsa/audio-tagging
+[hf-space-source-separation]: https://huggingface.co/spaces/k2-fsa/source-separation
+[hf-space-source-separation-cn]: https://hf.qhduan.com/spaces/k2-fsa/source-separation
 [hf-space-slid-whisper]: https://huggingface.co/spaces/k2-fsa/spoken-language-identification
+[hf-space-slid-whisper-cn]: https://hf.qhduan.com/spaces/k2-fsa/spoken-language-identification
 [wasm-hf-vad]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-sherpa-onnx
 [wasm-ms-vad]: https://modelscope.cn/studios/csukuangfj/web-assembly-vad-sherpa-onnx
 [wasm-hf-streaming-asr-zh-en-zipformer]: https://huggingface.co/spaces/k2-fsa/web-assembly-asr-sherpa-onnx-zh-en
@@ -382,6 +456,8 @@ It uses sherpa-onnx for speech-to-text and text-to-speech.
 [wasm-hf-streaming-asr-en-zipformer]: https://huggingface.co/spaces/k2-fsa/web-assembly-asr-sherpa-onnx-en
 [wasm-ms-streaming-asr-en-zipformer]: https://modelscope.cn/studios/k2-fsa/web-assembly-asr-sherpa-onnx-en
 [SenseVoice]: https://github.com/FunAudioLLM/SenseVoice
+[wasm-hf-vad-asr-zh-zipformer-ctc-07-03]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-zipformer-ctc
+[wasm-ms-vad-asr-zh-zipformer-ctc-07-03]: https://modelscope.cn/studios/csukuangfj/web-assembly-vad-asr-sherpa-onnx-zh-zipformer-ctc/summary
 [wasm-hf-vad-asr-zh-en-ko-ja-yue-sense-voice]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-en-ja-ko-cantonese-sense-voice
 [wasm-ms-vad-asr-zh-en-ko-ja-yue-sense-voice]: https://www.modelscope.cn/studios/csukuangfj/web-assembly-vad-asr-sherpa-onnx-zh-en-jp-ko-cantonese-sense-voice
 [wasm-hf-vad-asr-en-whisper-tiny-en]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-en-whisper-tiny
@@ -392,20 +468,20 @@ It uses sherpa-onnx for speech-to-text and text-to-speech.
 [wasm-ms-vad-asr-en-zipformer-gigaspeech]: https://www.modelscope.cn/studios/k2-fsa/web-assembly-vad-asr-sherpa-onnx-en-zipformer-gigaspeech
 [wasm-hf-vad-asr-zh-zipformer-wenetspeech]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-zipformer-wenetspeech
 [wasm-ms-vad-asr-zh-zipformer-wenetspeech]: https://www.modelscope.cn/studios/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-zipformer-wenetspeech
-[ReazonSpeech]: https://research.reazon.jp/_static/reazonspeech_nlp2023.pdf
+[reazonspeech]: https://research.reazon.jp/_static/reazonspeech_nlp2023.pdf
 [wasm-hf-vad-asr-ja-zipformer-reazonspeech]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-ja-zipformer
 [wasm-ms-vad-asr-ja-zipformer-reazonspeech]: https://www.modelscope.cn/studios/csukuangfj/web-assembly-vad-asr-sherpa-onnx-ja-zipformer
-[GigaSpeech2]: https://github.com/SpeechColab/GigaSpeech2
+[gigaspeech2]: https://github.com/speechcolab/gigaspeech2
 [wasm-hf-vad-asr-th-zipformer-gigaspeech2]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-th-zipformer
 [wasm-ms-vad-asr-th-zipformer-gigaspeech2]: https://www.modelscope.cn/studios/csukuangfj/web-assembly-vad-asr-sherpa-onnx-th-zipformer
-[TeleSpeech-ASR]: https://github.com/Tele-AI/TeleSpeech-ASR
+[telespeech-asr]: https://github.com/tele-ai/telespeech-asr
 [wasm-hf-vad-asr-zh-telespeech]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-telespeech
 [wasm-ms-vad-asr-zh-telespeech]: https://www.modelscope.cn/studios/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-telespeech
 [wasm-hf-vad-asr-zh-en-paraformer-large]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-en-paraformer
 [wasm-ms-vad-asr-zh-en-paraformer-large]: https://www.modelscope.cn/studios/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-en-paraformer
 [wasm-hf-vad-asr-zh-en-paraformer-small]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-en-paraformer-small
 [wasm-ms-vad-asr-zh-en-paraformer-small]: https://www.modelscope.cn/studios/k2-fsa/web-assembly-vad-asr-sherpa-onnx-zh-en-paraformer-small
-[Dolphin]: https://github.com/DataoceanAI/Dolphin
+[dolphin]: https://github.com/dataoceanai/dolphin
 [wasm-ms-vad-asr-multi-lang-dolphin-base]: https://modelscope.cn/studios/csukuangfj/web-assembly-vad-asr-sherpa-onnx-multi-lang-dophin-ctc
 [wasm-hf-vad-asr-multi-lang-dolphin-base]: https://huggingface.co/spaces/k2-fsa/web-assembly-vad-asr-sherpa-onnx-multi-lang-dophin-ctc
 
@@ -419,6 +495,8 @@ It uses sherpa-onnx for speech-to-text and text-to-speech.
 [apk-speaker-diarization-cn]: https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/apk-cn.html
 [apk-streaming-asr]: https://k2-fsa.github.io/sherpa/onnx/android/apk.html
 [apk-streaming-asr-cn]: https://k2-fsa.github.io/sherpa/onnx/android/apk-cn.html
+[apk-simula-streaming-asr]: https://k2-fsa.github.io/sherpa/onnx/android/apk-simulate-streaming-asr.html
+[apk-simula-streaming-asr-cn]: https://k2-fsa.github.io/sherpa/onnx/android/apk-simulate-streaming-asr-cn.html
 [apk-tts]: https://k2-fsa.github.io/sherpa/onnx/tts/apk-engine.html
 [apk-tts-cn]: https://k2-fsa.github.io/sherpa/onnx/tts/apk-engine-cn.html
 [apk-vad]: https://k2-fsa.github.io/sherpa/onnx/vad/apk.html
@@ -481,3 +559,17 @@ It uses sherpa-onnx for speech-to-text and text-to-speech.
 [NVIDIA Jetson Orin NX]: https://developer.download.nvidia.com/assets/embedded/secure/jetson/orin_nx/docs/Jetson_Orin_NX_DS-10712-001_v0.5.pdf?RCPGu9Q6OVAOv7a7vgtwc9-BLScXRIWq6cSLuditMALECJ_dOj27DgnqAPGVnT2VpiNpQan9SyFy-9zRykR58CokzbXwjSA7Gj819e91AXPrWkGZR3oS1VLxiDEpJa_Y0lr7UT-N4GnXtb8NlUkP4GkCkkF_FQivGPrAucCUywL481GH_WpP_p7ziHU1Wg==&t=eyJscyI6ImdzZW8iLCJsc2QiOiJodHRwczovL3d3dy5nb29nbGUuY29tLmhrLyJ9
 [NVIDIA Jetson Nano B01]: https://www.seeedstudio.com/blog/2020/01/16/new-revision-of-jetson-nano-dev-kit-now-supports-new-jetson-nano-module/
 [speech-enhancement-models]: https://github.com/k2-fsa/sherpa-onnx/releases/tag/speech-enhancement-models
+[source-separation-models]: https://github.com/k2-fsa/sherpa-onnx/releases/tag/source-separation-models
+[RK3588]: https://www.rock-chips.com/uploads/pdf/2022.8.26/192/RK3588%20Brief%20Datasheet.pdf
+[spleeter]: https://github.com/deezer/spleeter
+[UVR]: https://github.com/Anjok07/ultimatevocalremovergui
+[gtcrn]: https://github.com/Xiaobin-Rong/gtcrn
+[tts-url]: https://k2-fsa.github.io/sherpa/onnx/tts/all-in-one.html
+[ss-url]: https://k2-fsa.github.io/sherpa/onnx/source-separation/index.html
+[sd-url]: https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/index.html
+[slid-url]: https://k2-fsa.github.io/sherpa/onnx/spoken-language-identification/index.html
+[at-url]: https://k2-fsa.github.io/sherpa/onnx/audio-tagging/index.html
+[vad-url]: https://k2-fsa.github.io/sherpa/onnx/vad/index.html
+[kws-url]: https://k2-fsa.github.io/sherpa/onnx/kws/index.html
+[punct-url]: https://k2-fsa.github.io/sherpa/onnx/punctuation/index.html
+[se-url]: https://k2-fsa.github.io/sherpa/onnx/speech-enhancment/index.html

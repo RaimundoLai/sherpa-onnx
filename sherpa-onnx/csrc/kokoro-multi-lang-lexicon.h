@@ -20,7 +20,6 @@ class KokoroMultiLangLexicon : public OfflineTtsFrontend {
 
   KokoroMultiLangLexicon(const std::string &g2p_model, 
                          const std::string &tokens, const std::string &lexicon,
-                         const std::string &dict_dir,
                          const OfflineTtsKokoroModelMetaData &meta_data,
                          bool debug);
 
@@ -28,7 +27,6 @@ class KokoroMultiLangLexicon : public OfflineTtsFrontend {
   KokoroMultiLangLexicon(Manager *mgr, const std::string &g2p_model, 
                          const std::string &tokens,
                          const std::string &lexicon,
-                         const std::string &dict_dir,
                          const OfflineTtsKokoroModelMetaData &meta_data,
                          bool debug);
 

@@ -79,6 +79,12 @@ struct FeatureExtractorConfig {
 
   bool is_mfcc = false;
 
+  bool is_whisper = false;
+
+  bool is_t_one = false;
+
+  bool round_to_power_of_two = true;
+
   std::string ToString() const;
 
   void Register(ParseOptions *po);

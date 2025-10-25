@@ -6,9 +6,11 @@
 #define SHERPA_ONNX_CSRC_OFFLINE_TTS_IMPL_H_
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/offline-tts.h"
 
 namespace sherpa_onnx {
@@ -32,7 +34,10 @@ class OfflineTtsImpl {
 
   // Number of supported speakers.
   // If it supports only a single speaker, then it return 0 or 1.
-  virtual int32_t NumSpeakers() const = 0;
+  virtual int32_t NumSpeakers() const {
+    throw std::runtime_error(
+        "Zero-shot OfflineTts does not support NumSpeakers()");
+  }
 
   std::vector<int64_t> AddBlank(const std::vector<int64_t> &x,
                                 int32_t blank_id = 0) const;
