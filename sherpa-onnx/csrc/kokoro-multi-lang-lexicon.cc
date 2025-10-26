@@ -365,18 +365,7 @@ class KokoroMultiLangLexicon::Impl {
     std::vector<int32_t> ans;
     if (word2ids_.count(w)) {
       ans = word2ids_.at(w);
-    } else {
-      std::vector<std::string> words = SplitUtf8(w);
-      for (const auto &word : words) {
-        if (word2ids_.count(word)) {
-          auto ids = ConvertWordToIds(word);
-          ans.insert(ans.end(), ids.begin(), ids.end());
-        } else {
-          if (debug_) {
-            SHERPA_ONNX_LOGE("Skip OOV: '%s'", word.c_str());
-          }
-        }
-      }
+      return ans;
     }
 
     std::wstring ws = ToWideString(w);
