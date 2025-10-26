@@ -13,6 +13,7 @@
 #include "cppinyin/csrc/cppinyin.h"
 #include "sherpa-onnx/csrc/offline-tts-frontend.h"
 #include "sherpa-onnx/csrc/offline-tts-zipvoice-model-meta-data.h"
+#include "sherpa-onnx/csrc/tokenizer.h"
 
 namespace sherpa_onnx {
 
@@ -55,6 +56,7 @@ class OfflineTtsZipvoiceFrontend : public OfflineTtsFrontend {
       {"’", "'"},  {"⋯", "…"},  {"···", "…"}, {"・・・", "…"}, {"...", "…"}};
   OfflineTtsZipvoiceModelMetaData meta_data_;
   std::unique_ptr<cppinyin::PinyinEncoder> pinyin_encoder_;
+  std::unique_ptr<Tokenizer> g2p_tokenizer_;
 };
 
 }  // namespace sherpa_onnx

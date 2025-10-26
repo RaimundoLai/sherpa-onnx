@@ -95,7 +95,7 @@ class OfflineTtsZipvoiceImpl : public OfflineTtsImpl {
   void InitFrontend(Manager *mgr) {
     const auto &meta_data = model_->GetMetaData();
     frontend_ = std::make_unique<OfflineTtsZipvoiceFrontend>(
-        mgr, config_.model.zipvoice.tokens, config_.model.zipvoice.data_dir,
+        mgr, config_.model.zipvoice.tokens, config_.model.zipvoice.data_dir, 
         config_.model.zipvoice.pinyin_dict, meta_data, config_.model.debug);
   }
 
@@ -108,12 +108,8 @@ class OfflineTtsZipvoiceImpl : public OfflineTtsImpl {
           "pinyin.");
       exit(-1);
     }
-    if (meta_data.use_espeak && config_.model.zipvoice.data_dir.empty()) {
-      SHERPA_ONNX_LOGE("Please provide --zipvoice-data-dir for espeak-ng.");
-      exit(-1);
-    }
     frontend_ = std::make_unique<OfflineTtsZipvoiceFrontend>(
-        config_.model.zipvoice.tokens, config_.model.zipvoice.data_dir,
+        config_.model.zipvoice.tokens,  config_.model.zipvoice.data_dir,
         config_.model.zipvoice.pinyin_dict, meta_data, config_.model.debug);
   }
 

@@ -367,7 +367,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
           mgr, config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
-          config_.model.kokoro.dict_dir, meta_data, config_.model.debug);
+          meta_data, config_.model.debug);
 
       return;
     }
@@ -391,7 +391,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
           config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
-          config_.model.kokoro.dict_dir, meta_data, config_.model.debug);
+          meta_data, config_.model.debug);
 
       return;
     }

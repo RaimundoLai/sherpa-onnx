@@ -311,8 +311,7 @@ target_link_libraries(sherpa-onnx-core fstfar fst)
 
 if(SHERPA_ONNX_ENABLE_TTS)
   target_link_libraries(sherpa-onnx-core
-    cppinyin_core
-    piper_phonemize)
+    cppinyin_core)
 endif()
 
 if(SHERPA_ONNX_ENABLE_CHECK)

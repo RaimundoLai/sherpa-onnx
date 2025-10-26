@@ -40,12 +40,14 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
       const OfflineTtsMatchaModelMetaData &matcha_meta_data);
 
   PiperPhonemizeLexicon(
+      const std::string &g2p_model, 
+      const std::string &tokens,
+      const OfflineTtsKittenModelMetaData &kitten_meta_data);
+
+  PiperPhonemizeLexicon(
       const std::string &g2p_model,
       const std::string &tokens,
       const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
-
-  PiperPhonemizeLexicon(const std::string &tokens, const std::string &data_dir,
-                        const OfflineTtsKittenModelMetaData &kitten_meta_data);
 
   template <typename Manager>
   PiperPhonemizeLexicon(
@@ -66,8 +68,7 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
       const OfflineTtsKokoroModelMetaData &kokoro_meta_data);
 
   template <typename Manager>
-  PiperPhonemizeLexicon(Manager *mgr, const std::string &tokens,
-                        const std::string &data_dir,
+  PiperPhonemizeLexicon(Manager *mgr, const std::string &g2p_model, const std::string &tokens,
                         const OfflineTtsKittenModelMetaData &kitten_meta_data);
 
   std::vector<TokenIDs> ConvertTextToTokenIds(
@@ -79,7 +80,10 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
 
   std::vector<TokenIDs> ConvertTextToTokenIdsMatcha(
       const std::string &text, const std::string &voice = "") const;
-
+  std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
+      const std::unordered_map<char32_t, int32_t> &token2id,
+      int32_t max_token_len, const std::string &text,
+      const std::string &voice = "") const;
  private:
   // map unicode codepoint to an integer ID
   std::unordered_map<char32_t, int32_t> token2id_;

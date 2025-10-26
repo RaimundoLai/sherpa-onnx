@@ -22,19 +22,14 @@
 #endif
 
 #include "cppinyin/csrc/cppinyin.h"
-#include "espeak-ng/speak_lib.h"
-#include "phoneme_ids.hpp"
-#include "phonemize.hpp"
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/offline-tts-zipvoice-frontend.h"
 #include "sherpa-onnx/csrc/text-utils.h"
+#include "sherpa-onnx/csrc/tokenizer.h"
 
 namespace sherpa_onnx {
 
-void CallPhonemizeEspeak(const std::string &text,
-                         piper::eSpeakPhonemeConfig &config,  // NOLINT
-                         std::vector<std::vector<piper::Phoneme>> *phonemes);
 
 static std::unordered_map<std::string, int32_t> ReadTokens(std::istream &is) {
   std::unordered_map<std::string, int32_t> token2id;
@@ -138,29 +133,25 @@ static void TokenizeZh(const std::string &words,
 }
 
 static void TokenizeEn(const std::string &words,
+                       const Tokenizer *g2p_tokenizer,
                        const std::unordered_map<std::string, int32_t> &token2id,
                        const std::string &voice,
                        std::vector<int64_t> *token_ids,
                        std::vector<std::string> *tokens) {
-  piper::eSpeakPhonemeConfig config;
   // ./bin/espeak-ng-bin --path  ./install/share/espeak-ng-data/ --voices
   // to list available voices
-  config.voice = voice;  // e.g., voice is en-us
-
-  std::vector<std::vector<piper::Phoneme>> phonemes;
-
-  CallPhonemizeEspeak(words, config, &phonemes);
-
-  for (const auto &p : phonemes) {
-    for (const auto &ph : p) {
-      auto token = Utf32ToUtf8(std::u32string(1, ph));
-      if (token2id.count(token)) {
-        token_ids->push_back(token2id.at(token));
-        tokens->push_back(token);
-      } else {
-        SHERPA_ONNX_LOGE("Skip unknown phoneme %s", token.c_str());
-      }
-    }
+  std::vector<int64_t> ids = g2p_tokenizer->Tokenize(words, "en-us");
+  std::unordered_map<int32_t, std::string> id2words_;
+  for (const auto& pair : token2id) {
+      id2words_[pair.second] = pair.first;
+  }
+  for (const auto& id : ids) {
+     if (id2words_.count(id)) {
+        token_ids->push_back(id);
+        tokens->push_back(id2words_.at(id));
+     } else {
+        SHERPA_ONNX_LOGE("Skip unknown phoneme %d", id);
+     }
   }
 }
 
@@ -208,12 +199,7 @@ OfflineTtsZipvoiceFrontend::OfflineTtsZipvoiceFrontend(
   } else {
     pinyin_encoder_ = nullptr;
   }
-  if (meta_data_.use_espeak) {
-    // We should copy the directory of espeak-ng-data from the asset to
-    // some internal or external storage and then pass the directory to
-    // data_dir.
-    InitEspeak(data_dir);
-  }
+  g2p_tokenizer_ = CreateTokenizer(data_dir, token2id_);
 }
 
 template <typename Manager>
@@ -232,12 +218,7 @@ OfflineTtsZipvoiceFrontend::OfflineTtsZipvoiceFrontend(
   } else {
     pinyin_encoder_ = nullptr;
   }
-  if (meta_data_.use_espeak) {
-    // We should copy the directory of espeak-ng-data from the asset to
-    // some internal or external storage and then pass the directory to
-    // data_dir.
-    InitEspeak(data_dir);
-  }
+  g2p_tokenizer_ = CreateTokenizer(data_dir, token2id_);
 }
 
 std::vector<TokenIDs> OfflineTtsZipvoiceFrontend::ConvertTextToTokenIds(
@@ -338,7 +319,7 @@ std::vector<TokenIDs> OfflineTtsZipvoiceFrontend::ConvertTextToTokenIds(
       TokenizeZh(pt.first, pinyin_encoder_.get(), token2id_, &token_ids,
                  &tokens);
     } else if (pt.second == "en") {
-      TokenizeEn(pt.first, token2id_, voice, &token_ids, &tokens);
+      TokenizeEn(pt.first, g2p_tokenizer_.get(), token2id_, voice, &token_ids, &tokens);
     } else if (pt.second == "pinyin") {
       TokenizePinyin(pt.first, pinyin_encoder_.get(), token2id_, &token_ids,
                      &tokens);

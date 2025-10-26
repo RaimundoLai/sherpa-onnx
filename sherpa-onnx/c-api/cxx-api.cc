@@ -472,7 +472,7 @@ GeneratedAudio OfflineTts::Generate(const std::string &text,
 std::shared_ptr<GeneratedAudio> OfflineTts::Generate2(
     const std::string &text, int32_t sid /*= 0*/, float speed /*= 1.0*/,
     OfflineTtsCallback callback /*= nullptr*/, void *arg /*= nullptr*/) const {
-  auto audio = Generate(text, sid, speed, callback, arg);
+  auto audio = Generate(text, sid, speed, false, "en-us", callback, arg);
 
   GeneratedAudio *ans = new GeneratedAudio;
   ans->samples = std::move(audio.samples);
