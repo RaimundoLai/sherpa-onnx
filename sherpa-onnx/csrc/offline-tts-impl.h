@@ -40,6 +40,17 @@ class OfflineTtsImpl {
     throw std::runtime_error(
         "OfflineTtsImpl backend does not support zero-shot Generate()");
   }
+
+  virtual GeneratedAudio Generate(
+    const std::string &text, 
+    const std::string &audio_dir,
+    float speed = 1.0, 
+    const std::string &lang = "en-us",
+    float exaggeration = 0.5f,
+    GeneratedAudioCallback callback = nullptr) const {
+    throw std::runtime_error(
+        "OfflineTtsImpl backend does not support zero-shot Generate()");
+  }
   // Return the sample rate of the generated audio
   virtual int32_t SampleRate() const = 0;
 

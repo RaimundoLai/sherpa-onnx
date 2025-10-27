@@ -684,6 +684,14 @@ std::string Gb2312ToUtf8(const std::string &text) {
 
   return ans;
 }
+std::wstring StrToWstr(const std::string &s) {
+  int32_t len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+  wchar_t *wstr = new wchar_t[len];
+  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, wstr, len);
+  std::wstring ret(wstr);
+  delete[] wstr;
+  return ret;
+}
 #endif
 
 std::wstring ToWideString(const std::string &s) {

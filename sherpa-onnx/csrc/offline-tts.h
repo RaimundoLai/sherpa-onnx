@@ -12,6 +12,7 @@
 
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
 #include "sherpa-onnx/csrc/parse-options.h"
+#include "sherpa-onnx/csrc/macros.h"
 
 namespace sherpa_onnx {
 
@@ -114,6 +115,13 @@ class OfflineTts {
                           int32_t sample_rate, float speed = 1.0,
                           int32_t num_steps = 4,
                           GeneratedAudioCallback callback = nullptr) const;
+  GeneratedAudio Generate(
+      const std::string &text, 
+      const std::string &audio_dir,
+      float speed = 1.0, 
+      const std::string &lang = "en-us",
+      float exaggeration = 0.5f,
+      GeneratedAudioCallback callback = nullptr) const;
 
   // Return the sample rate of the generated audio
   int32_t SampleRate() const;

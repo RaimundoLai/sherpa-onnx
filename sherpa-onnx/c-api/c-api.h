@@ -1070,6 +1070,15 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsZipvoiceModelConfig {
   float guidance_scale;
 } SherpaOnnxOfflineTtsZipvoiceModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsChatterboxModelConfig {
+  const char *speech_encoder;
+  const char *embed_tokens;
+  const char *language_model;
+  const char *conditional_decoder;
+  const char *tokenizer;
+  const char *lang;
+} SherpaOnnxOfflineTtsChatterboxModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
   SherpaOnnxOfflineTtsVitsModelConfig vits;
   int32_t num_threads;
@@ -1079,6 +1088,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
   SherpaOnnxOfflineTtsKokoroModelConfig kokoro;
   SherpaOnnxOfflineTtsKittenModelConfig kitten;
   SherpaOnnxOfflineTtsZipvoiceModelConfig zipvoice;
+  SherpaOnnxOfflineTtsChatterboxModelConfig chatterbox;
 } SherpaOnnxOfflineTtsModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsConfig {
@@ -1171,6 +1181,15 @@ SherpaOnnxOfflineTtsGenerateWithZipvoice(const SherpaOnnxOfflineTts *tts,
                                          const float *prompt_samples,
                                          int32_t n_prompt, int32_t prompt_sr,
                                          float speed, int32_t num_steps);
+
+SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *
+SherpaOnnxOfflineTtsGenerateWithChatterbox(const SherpaOnnxOfflineTts *tts,
+                                         const char *text,
+                                         const char *audio_dir,
+                                         float speed, 
+                                         const char *lang,
+                                         float exaggeration, 
+                                         SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg);
 
 SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     const SherpaOnnxGeneratedAudio *p);

@@ -1247,6 +1247,20 @@ static sherpa_onnx::OfflineTtsConfig GetOfflineTtsConfig(
   tts_config.model.zipvoice.guidance_scale =
       SHERPA_ONNX_OR(config->model.zipvoice.guidance_scale, 1.0f);
 
+  // chatterbox
+  tts_config.model.chatterbox.speech_encoder =
+      SHERPA_ONNX_OR(config->model.chatterbox.speech_encoder, "");
+  tts_config.model.chatterbox.embed_tokens =
+      SHERPA_ONNX_OR(config->model.chatterbox.embed_tokens, "");
+  tts_config.model.chatterbox.language_model =
+      SHERPA_ONNX_OR(config->model.chatterbox.language_model, "");
+  tts_config.model.chatterbox.conditional_decoder =
+      SHERPA_ONNX_OR(config->model.chatterbox.conditional_decoder, "");
+  tts_config.model.chatterbox.tokenizer =
+      SHERPA_ONNX_OR(config->model.chatterbox.tokenizer, "");
+  tts_config.model.chatterbox.lang =
+      SHERPA_ONNX_OR(config->model.chatterbox.lang, "");
+
   tts_config.model.num_threads = SHERPA_ONNX_OR(config->model.num_threads, 1);
   tts_config.model.debug = config->model.debug;
   tts_config.model.provider = SHERPA_ONNX_OR(config->model.provider, "cpu");
@@ -1368,6 +1382,36 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithCallbackWithArg(
 
   return SherpaOnnxOfflineTtsGenerateInternal(tts, text, sid, speed, g2p, lang, wrapper);
 }
+const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithChatterbox(
+    const SherpaOnnxOfflineTts *tts, 
+    const char *text, 
+    const char *audio_dir,
+    float speed, 
+    const char *lang,
+    float exaggeration, 
+    SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
+    auto wrapper = [callback, arg](const float *samples, int32_t n,
+                                 float progress) {
+        return callback(samples, n, progress, arg);
+    };
+  sherpa_onnx::GeneratedAudio audio =
+      tts->impl->Generate(text, audio_dir, speed, lang, exaggeration, wrapper);
+
+  if (audio.samples.empty()) {
+    return nullptr;
+  }
+
+  SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
+
+  float *samples = new float[audio.samples.size()];
+  std::copy(audio.samples.begin(), audio.samples.end(), samples);
+
+  ans->samples = samples;
+  ans->n = audio.samples.size();
+  ans->sample_rate = audio.sample_rate;
+
+  return ans;
+}
 
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
     const SherpaOnnxOfflineTts *tts, const char *text, const char *prompt_text,
@@ -1462,7 +1506,17 @@ SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
   SHERPA_ONNX_LOGE("TTS is not enabled. Please rebuild sherpa-onnx");
   return nullptr;
 }
-
+const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithChatterbox(
+    const SherpaOnnxOfflineTts *tts, 
+    const char *text, 
+    const char *audio_dir,
+    float speed, 
+    const char *lang,
+    float exaggeration, 
+    SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
+  SHERPA_ONNX_LOGE("TTS is not enabled. Please rebuild sherpa-onnx");
+  return nullptr;
+}
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithCallbackWithArg(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
     SherpaOnnxGeneratedAudioCallbackWithArg callback, void *arg) {

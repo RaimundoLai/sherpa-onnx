@@ -139,6 +139,7 @@ bool IsGB2312(const std::string &text);
 
 #if defined(_WIN32)
 std::string Gb2312ToUtf8(const std::string &text);
+std::wstring StrToWstr(const std::string &s);
 #endif
 
 std::wstring ToWideString(const std::string &s);

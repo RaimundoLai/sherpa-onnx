@@ -16,6 +16,7 @@
 #include "rawfile/raw_file_manager.h"
 #endif
 
+#include "sherpa-onnx/csrc/offline-tts-chatterbox-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-kitten-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-kokoro-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-impl.h"
@@ -49,6 +50,8 @@ std::unique_ptr<OfflineTtsImpl> OfflineTtsImpl::Create(
     return std::make_unique<OfflineTtsKokoroImpl>(config);
   } else if (!config.model.kitten.model.empty()) {
     return std::make_unique<OfflineTtsKittenImpl>(config);
+  } else if (!config.model.chatterbox.speech_encoder.empty()) {
+    return std::make_unique<OfflineTtsChatterboxImpl>(config);
   }
 
   SHERPA_ONNX_LOGE("Please provide a tts model.");
@@ -70,6 +73,9 @@ std::unique_ptr<OfflineTtsImpl> OfflineTtsImpl::Create(
     return std::make_unique<OfflineTtsKokoroImpl>(mgr, config);
   } else if (!config.model.kitten.model.empty()) {
     return std::make_unique<OfflineTtsKittenImpl>(mgr, config);
+  } else if (!config.model.chatterbox.speech_encoder.empty()) {
+    // TODO(fangjun): support loading from asset manager
+    return std::make_unique<OfflineTtsChatterboxImpl>(config);
   }
 
   SHERPA_ONNX_LOGE("Please provide a tts model.");

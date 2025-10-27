@@ -189,6 +189,8 @@ endif()
 
 if(SHERPA_ONNX_ENABLE_TTS)
   list(APPEND sources
+    offline-tts-chatterbox-model-config.cc
+    offline-tts-chatterbox-model.cc
     character-lexicon.cc
     hifigan-vocoder.cc
     kokoro-multi-lang-lexicon.cc
@@ -311,7 +313,8 @@ target_link_libraries(sherpa-onnx-core fstfar fst)
 
 if(SHERPA_ONNX_ENABLE_TTS)
   target_link_libraries(sherpa-onnx-core
-    cppinyin_core)
+    cppinyin_core
+    tokenizers_cpp)
 endif()
 
 if(SHERPA_ONNX_ENABLE_CHECK)

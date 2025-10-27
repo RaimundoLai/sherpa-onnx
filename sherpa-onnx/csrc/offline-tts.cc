@@ -237,7 +237,35 @@ GeneratedAudio OfflineTts::Generate(
   }
 #endif
 }
-
+GeneratedAudio OfflineTts::Generate(
+      const std::string &text, 
+      const std::string &audio_dir,
+      float speed, 
+      const std::string &lang,
+      float exaggeration,
+      GeneratedAudioCallback callback) const {
+#if !defined(_WIN32)
+  return impl_->Generate(text, audio_dir, speed, lang, exaggeration, std::move(callback));
+#else
+  if (IsUtf8(text)) {
+    return impl_->Generate(text, audio_dir, speed, lang, exaggeration, std::move(callback));
+  } else if (IsGB2312(text)) {
+    auto utf8_text = Gb2312ToUtf8(text);
+    static bool printed = false;
+    if (!printed) {
+      SHERPA_ONNX_LOGE(
+          "Detected GB2312 encoded string! Converting it to UTF8.");
+      printed = true;
+    }
+    return impl_->Generate(utf8_text, audio_dir, speed, lang, exaggeration, std::move(callback));
+  } else {
+    SHERPA_ONNX_LOGE(
+        "Non UTF8 encoded string is received. You would not get expected "
+        "results!");
+    return impl_->Generate(text, audio_dir, speed, lang, exaggeration, std::move(callback));
+  }
+#endif
+}
 int32_t OfflineTts::SampleRate() const { return impl_->SampleRate(); }
 
 int32_t OfflineTts::NumSpeakers() const { return impl_->NumSpeakers(); }
