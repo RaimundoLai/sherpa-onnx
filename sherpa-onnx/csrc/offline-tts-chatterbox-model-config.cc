@@ -22,6 +22,10 @@ void OfflineTtsChatterboxModelConfig::Register(ParseOptions *po) {
                "Path to tokenizer.json from chatterbox");
   po->Register("chatterbox-lang", &lang,
                "Language of the model. e.g., en. Currently ignored.");
+  po->Register("chatterbox-lexicon", &lexicon,
+               "Path to lexicon.txt from chatterbox");
+  po->Register("chatterbox-cangjie-dict", &cangjie_dict,
+               "Path to cangjie_dict.txt from chatterbox");
 }
 
 bool OfflineTtsChatterboxModelConfig::Validate() const {
@@ -74,6 +78,8 @@ std::string OfflineTtsChatterboxModelConfig::ToString() const {
   os << "language_model=\"" << language_model << "\", ";
   os << "conditional_decoder=\"" << conditional_decoder << "\", ";
   os << "tokenizer=\"" << tokenizer << "\", ";
+  os << "lexicon=\"" << lexicon << "\", ";
+  os << "cangjie_dict=\"" << cangjie_dict << "\", ";
   os << "lang=\"" << lang << "\")";
   return os.str();
 }

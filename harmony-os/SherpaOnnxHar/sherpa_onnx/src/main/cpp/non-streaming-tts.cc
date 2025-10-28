@@ -88,6 +88,8 @@ static SherpaOnnxOfflineTtsChatterboxModelConfig GetOfflineTtsChatterboxModelCon
   SHERPA_ONNX_ASSIGN_ATTR_STR(conditional_decoder, conditionalDecoder);
   SHERPA_ONNX_ASSIGN_ATTR_STR(tokenizer, tokenizer);
   SHERPA_ONNX_ASSIGN_ATTR_STR(lang, lang);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(lexicon, lexicon);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(cangjie_dict, cangjieDict);
 
   return c;
 }
@@ -225,6 +227,8 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.conditional_decoder);
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.tokenizer);
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lang);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.cangjie_dict);
 
   SHERPA_ONNX_DELETE_C_STR(c.model.provider);
 
