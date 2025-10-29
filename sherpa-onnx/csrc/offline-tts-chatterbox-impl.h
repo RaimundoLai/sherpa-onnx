@@ -4,6 +4,7 @@
 #ifndef SHERPA_ONNX_CSRC_OFFLINE_TTS_CHATTERBOX_IMPL_H_
 #define SHERPA_ONNX_CSRC_OFFLINE_TTS_CHATTERBOX_IMPL_H_
 #include "sherpa-onnx/csrc/wave-reader.h"
+#include "sherpa-onnx/csrc/resample.h"
 
 #include <memory>
 #include <string>
@@ -243,6 +244,29 @@ GeneratedAudio Generate(
             SHERPA_ONNX_LOGE("Failed to read reference audio: %s", audio_dir.c_str());
             exit(1);
         }
+
+        if (prompt_sample_rate != SampleRate()) {
+          SHERPA_ONNX_LOGE(
+              "Reference audio sample rate %d != target sample rate %d. "
+              "Resampling...",
+              prompt_sample_rate, SampleRate());
+
+          float cutoff_hz =
+              std::min(prompt_sample_rate, SampleRate()) / 2.0f * 0.95f;
+          
+          int32_t num_zeros = 8; 
+
+          sherpa_onnx::LinearResample resampler(prompt_sample_rate, SampleRate(),
+                                               cutoff_hz, num_zeros);
+
+          std::vector<float> resampled_samples;
+          resampler.Resample(prompt_samples.data(), prompt_samples.size(),
+                             true,  // true = flush
+                             &resampled_samples);
+
+          prompt_samples = std::move(resampled_samples);
+        }
+
     } else {
         SHERPA_ONNX_LOGE("No reference audio provided for zero-shot TTS.");
         exit(1);
@@ -252,7 +276,7 @@ GeneratedAudio Generate(
         std::move(x_tensor),
         prompt_samples.data(),
         prompt_samples.size(),
-        speed, // Note: speed is not used in Impl::Run, but text_seed is? Check parameters.
+        speed, 
         exaggeration
     );
 
