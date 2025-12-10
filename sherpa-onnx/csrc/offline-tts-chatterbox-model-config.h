@@ -20,6 +20,7 @@ struct OfflineTtsChatterboxModelConfig {
   std::string lang;
   std::string lexicon;
   std::string cangjie_dict;
+  std::string perth_watermarker;
 
   OfflineTtsChatterboxModelConfig() = default;
 
@@ -27,7 +28,8 @@ struct OfflineTtsChatterboxModelConfig {
       const std::string &speech_encoder, const std::string &embed_tokens,
       const std::string &language_model,
       const std::string &conditional_decoder, const std::string &tokenizer,
-      const std::string &lang, const std::string &lexicon, const std::string &cangjie_dict)
+      const std::string &lang, const std::string &lexicon, 
+      const std::string &cangjie_dict, const std::string &perth_watermarker = "")
       : speech_encoder(speech_encoder),
         embed_tokens(embed_tokens),
         language_model(language_model),
@@ -35,7 +37,8 @@ struct OfflineTtsChatterboxModelConfig {
         tokenizer(tokenizer),
         lang(lang),
         lexicon(lexicon),
-        cangjie_dict(cangjie_dict) {}
+        cangjie_dict(cangjie_dict),
+        perth_watermarker(perth_watermarker) {}
 
   void Register(ParseOptions *po);
   bool Validate() const;

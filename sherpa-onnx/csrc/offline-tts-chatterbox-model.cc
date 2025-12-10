@@ -57,7 +57,8 @@ class OfflineTtsChatterboxModel::Impl {
         sess_opts_(GetSessionOptions(config)) {
     auto &chatterbox = config_.chatterbox;
     Init(chatterbox.speech_encoder, chatterbox.embed_tokens,
-         chatterbox.language_model, chatterbox.conditional_decoder);
+         chatterbox.language_model, chatterbox.conditional_decoder,
+         chatterbox.perth_watermarker);
   }
 
 Ort::Value Run(Ort::Value &tokens, const float *prompt, int64_t n_prompt,
@@ -242,13 +243,43 @@ Ort::Value Run(Ort::Value &tokens, const float *prompt, int64_t n_prompt,
     const char* decoder_output_name = "waveform";
     auto wav_outputs = cond_decoder_session_->Run(run_options, decoder_input_names.data(), decoder_inputs.data(), decoder_input_names.size(), &decoder_output_name, 1);
     
+    // Apply Perth watermarker if available
+    if (perth_watermarker_session_) {
+        Ort::Value waveform = std::move(wav_outputs[0]);
+        auto waveform_shape = waveform.GetTensorTypeAndShapeInfo().GetShape();
+        int64_t num_samples = 1;
+        for (auto dim : waveform_shape) {
+            num_samples *= dim;
+        }
+        
+        // Reshape to [1, num_samples] for Perth watermarker
+        std::vector<int64_t> audio_shape = {1, num_samples};
+        const float* wav_data = waveform.GetTensorData<float>();
+        
+        // Create a copy of the data since we need to reshape
+        std::vector<float> audio_data(wav_data, wav_data + num_samples);
+        Ort::Value audio_tensor = Ort::Value::CreateTensor<float>(
+            memory_info, audio_data.data(), audio_data.size(),
+            audio_shape.data(), audio_shape.size());
+        
+        // Run Perth watermarker
+        const char* watermarker_input_name = "audio_values";
+        const char* watermarker_output_name = "watermarked_audio_values";
+        auto watermarked_outputs = perth_watermarker_session_->Run(
+            run_options, &watermarker_input_name, &audio_tensor, 1,
+            &watermarker_output_name, 1);
+        
+        return std::move(watermarked_outputs[0]);
+    }
+    
     return std::move(wav_outputs[0]);
 }
 
  private:
   void Init(const std::string &speech_encoder,
             const std::string &embed_tokens, const std::string &language_model,
-            const std::string &conditional_decoder) {
+            const std::string &conditional_decoder,
+            const std::string &perth_watermarker = "") {
 #ifdef _WIN32
     speech_encoder_session_ = std::make_unique<Ort::Session>(
         env_, StrToWstr(speech_encoder).c_str(), sess_opts_);
@@ -258,6 +289,11 @@ Ort::Value Run(Ort::Value &tokens, const float *prompt, int64_t n_prompt,
         env_, StrToWstr(language_model).c_str(), sess_opts_);
     cond_decoder_session_ = std::make_unique<Ort::Session>(
         env_, StrToWstr(conditional_decoder).c_str(), sess_opts_);
+    if (!perth_watermarker.empty()) {
+      perth_watermarker_session_ = std::make_unique<Ort::Session>(
+          env_, StrToWstr(perth_watermarker).c_str(), sess_opts_);
+      SHERPA_ONNX_LOGE("Perth watermarker loaded: %s", perth_watermarker.c_str());
+    }
 #else
     speech_encoder_session_ = std::make_unique<Ort::Session>(
         env_, speech_encoder.c_str(), sess_opts_);
@@ -267,6 +303,11 @@ Ort::Value Run(Ort::Value &tokens, const float *prompt, int64_t n_prompt,
                                                     sess_opts_);
     cond_decoder_session_ = std::make_unique<Ort::Session>(
         env_, conditional_decoder.c_str(), sess_opts_);
+    if (!perth_watermarker.empty()) {
+      perth_watermarker_session_ = std::make_unique<Ort::Session>(
+          env_, perth_watermarker.c_str(), sess_opts_);
+      SHERPA_ONNX_LOGE("Perth watermarker loaded: %s", perth_watermarker.c_str());
+    }
 #endif
   }
 
@@ -278,6 +319,7 @@ Ort::Value Run(Ort::Value &tokens, const float *prompt, int64_t n_prompt,
   std::unique_ptr<Ort::Session> embed_tokens_session_;
   std::unique_ptr<Ort::Session> llama_session_;
   std::unique_ptr<Ort::Session> cond_decoder_session_;
+  std::unique_ptr<Ort::Session> perth_watermarker_session_;
 };
 
 OfflineTtsChatterboxModel::OfflineTtsChatterboxModel(

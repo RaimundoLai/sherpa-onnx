@@ -26,6 +26,8 @@ void OfflineTtsChatterboxModelConfig::Register(ParseOptions *po) {
                "Path to lexicon.txt from chatterbox");
   po->Register("chatterbox-cangjie-dict", &cangjie_dict,
                "Path to cangjie_dict.txt from chatterbox");
+  po->Register("chatterbox-perth-watermarker", &perth_watermarker,
+               "Path to Perth watermarker ONNX model for audio watermarking (optional)");
 }
 
 bool OfflineTtsChatterboxModelConfig::Validate() const {
@@ -67,6 +69,13 @@ bool OfflineTtsChatterboxModelConfig::Validate() const {
     return false;
   }
 
+  // perth_watermarker is optional, but validate if provided
+  if (!perth_watermarker.empty() && !FileExists(perth_watermarker)) {
+    SHERPA_ONNX_LOGE("chatterbox perth watermarker file not found: %s",
+                     perth_watermarker.c_str());
+    return false;
+  }
+
   return true;
 }
 
@@ -80,6 +89,7 @@ std::string OfflineTtsChatterboxModelConfig::ToString() const {
   os << "tokenizer=\"" << tokenizer << "\", ";
   os << "lexicon=\"" << lexicon << "\", ";
   os << "cangjie_dict=\"" << cangjie_dict << "\", ";
+  os << "perth_watermarker=\"" << perth_watermarker << "\", ";
   os << "lang=\"" << lang << "\")";
   return os.str();
 }

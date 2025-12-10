@@ -90,6 +90,7 @@ static SherpaOnnxOfflineTtsChatterboxModelConfig GetOfflineTtsChatterboxModelCon
   SHERPA_ONNX_ASSIGN_ATTR_STR(lang, lang);
   SHERPA_ONNX_ASSIGN_ATTR_STR(lexicon, lexicon);
   SHERPA_ONNX_ASSIGN_ATTR_STR(cangjie_dict, cangjieDict);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(perth_watermarker, perthWatermarker);
 
   return c;
 }
@@ -229,6 +230,7 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lang);
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lexicon);
   SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.cangjie_dict);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.perth_watermarker);
 
   SHERPA_ONNX_DELETE_C_STR(c.model.provider);
 

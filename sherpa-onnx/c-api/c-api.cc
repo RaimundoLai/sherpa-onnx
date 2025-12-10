@@ -1264,6 +1264,8 @@ static sherpa_onnx::OfflineTtsConfig GetOfflineTtsConfig(
       SHERPA_ONNX_OR(config->model.chatterbox.lexicon, "");
   tts_config.model.chatterbox.cangjie_dict =
       SHERPA_ONNX_OR(config->model.chatterbox.cangjie_dict, "");
+  tts_config.model.chatterbox.perth_watermarker =
+      SHERPA_ONNX_OR(config->model.chatterbox.perth_watermarker, "");
   tts_config.model.num_threads = SHERPA_ONNX_OR(config->model.num_threads, 1);
   tts_config.model.debug = config->model.debug;
   tts_config.model.provider = SHERPA_ONNX_OR(config->model.provider, "cpu");

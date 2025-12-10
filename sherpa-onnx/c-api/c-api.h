@@ -1079,6 +1079,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsChatterboxModelConfig {
   const char *lang;
   const char *lexicon;
   const char *cangjie_dict;
+  const char *perth_watermarker;
 } SherpaOnnxOfflineTtsChatterboxModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
