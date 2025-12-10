@@ -25,6 +25,11 @@
 #include "sherpa-onnx/csrc/text-utils.h"
 #include "sherpa-onnx/csrc/file-utils.h"
 
+// FST includes for text normalization
+#include "fst/extensions/far/far.h"
+#include "kaldifst/csrc/kaldi-fst-io.h"
+#include "kaldifst/csrc/text-normalizer.h"
+
 namespace sherpa_onnx {
 
 class OfflineTtsChatterboxImpl : public OfflineTtsImpl {
@@ -47,6 +52,48 @@ class OfflineTtsChatterboxImpl : public OfflineTtsImpl {
 
         std::istrstream is(buf.data(), buf.size());
         InitLexicon(is);
+      }
+    }
+
+    // Load FST text normalizers (for number/date conversion)
+    if (!config.rule_fsts.empty()) {
+      std::vector<std::string> files;
+      SplitStringToVector(config.rule_fsts, ",", false, &files);
+      tn_list_.reserve(files.size());
+      for (const auto &f : files) {
+        if (config.model.debug) {
+          SHERPA_ONNX_LOGE("chatterbox rule fst: %s", f.c_str());
+        }
+        tn_list_.push_back(std::make_unique<kaldifst::TextNormalizer>(f));
+      }
+    }
+
+    if (!config.rule_fars.empty()) {
+      if (config.model.debug) {
+        SHERPA_ONNX_LOGE("Loading FST archives for Chatterbox");
+      }
+      std::vector<std::string> files;
+      SplitStringToVector(config.rule_fars, ",", false, &files);
+
+      tn_list_.reserve(files.size() + tn_list_.size());
+
+      for (const auto &f : files) {
+        if (config.model.debug) {
+          SHERPA_ONNX_LOGE("chatterbox rule far: %s", f.c_str());
+        }
+        std::unique_ptr<fst::FarReader<fst::StdArc>> reader(
+            fst::FarReader<fst::StdArc>::Open(f));
+        for (; !reader->Done(); reader->Next()) {
+          std::unique_ptr<fst::StdConstFst> r(
+              fst::CastOrConvertToConstFst(reader->GetFst()->Copy()));
+
+          tn_list_.push_back(
+              std::make_unique<kaldifst::TextNormalizer>(std::move(r)));
+        }
+      }
+
+      if (config.model.debug) {
+        SHERPA_ONNX_LOGE("FST archives loaded for Chatterbox!");
       }
     }
   }
@@ -435,7 +482,19 @@ GeneratedAudio Generate(
     float exaggeration = 0.5f,
     GeneratedAudioCallback callback = nullptr) const override {
 
-    std::string processed_text = prepare_language(text, lang);
+    std::string normalized_text = text;
+    
+    // Apply FST text normalization first (for number/date conversion)
+    if (!tn_list_.empty()) {
+      for (const auto &tn : tn_list_) {
+        normalized_text = tn->Normalize(normalized_text);
+        if (config_.model.debug) {
+          SHERPA_ONNX_LOGE("After FST normalizing: %s", normalized_text.c_str());
+        }
+      }
+    }
+
+    std::string processed_text = prepare_language(normalized_text, lang);
     SHERPA_ONNX_LOGE("processed_text: %s", processed_text.c_str());
     std::vector<int32_t> ids = tok_->Encode(processed_text);
     for (int32_t &id : ids) {
@@ -731,6 +790,7 @@ private:
   std::unordered_map<std::string, std::vector<std::u32string>> cj2word_;
   std::unordered_set<std::string> all_words_;
   const std::unordered_map<int32_t, int32_t> unknownIdsMapping_;
+  std::vector<std::unique_ptr<kaldifst::TextNormalizer>> tn_list_;
 };
 
 }  // namespace sherpa_onnx
