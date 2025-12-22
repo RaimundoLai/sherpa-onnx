@@ -9,6 +9,9 @@ data class OfflineRecognizerResult(
     val lang: String,
     val emotion: String,
     val event: String,
+
+    // valid only for TDT models
+    val durations: FloatArray,
 )
 
 data class OfflineTransducerModelConfig(
@@ -29,12 +32,28 @@ data class OfflineDolphinModelConfig(
     var model: String = "",
 )
 
+data class OfflineZipformerCtcModelConfig(
+    var model: String = "",
+)
+
+data class OfflineWenetCtcModelConfig(
+    var model: String = "",
+)
+
 data class OfflineWhisperModelConfig(
     var encoder: String = "",
     var decoder: String = "",
     var language: String = "en", // Used with multilingual model
     var task: String = "transcribe", // transcribe or translate
     var tailPaddings: Int = 1000, // Padding added at the end of the samples
+)
+
+data class OfflineCanaryModelConfig(
+    var encoder: String = "",
+    var decoder: String = "",
+    var srcLang: String = "en",
+    var tgtLang: String = "en",
+    var usePnc: Boolean = true,
 )
 
 data class OfflineFireRedAsrModelConfig(
@@ -64,6 +83,9 @@ data class OfflineModelConfig(
     var nemo: OfflineNemoEncDecCtcModelConfig = OfflineNemoEncDecCtcModelConfig(),
     var senseVoice: OfflineSenseVoiceModelConfig = OfflineSenseVoiceModelConfig(),
     var dolphin: OfflineDolphinModelConfig = OfflineDolphinModelConfig(),
+    var zipformerCtc: OfflineZipformerCtcModelConfig = OfflineZipformerCtcModelConfig(),
+    var wenetCtc: OfflineWenetCtcModelConfig = OfflineWenetCtcModelConfig(),
+    var canary: OfflineCanaryModelConfig = OfflineCanaryModelConfig(),
     var teleSpeech: String = "",
     var numThreads: Int = 1,
     var debug: Boolean = false,
@@ -90,7 +112,7 @@ data class OfflineRecognizerConfig(
 
 class OfflineRecognizer(
     assetManager: AssetManager? = null,
-    config: OfflineRecognizerConfig,
+    val config: OfflineRecognizerConfig,
 ) {
     private var ptr: Long
 
@@ -125,21 +147,27 @@ class OfflineRecognizer(
         val lang = objArray[3] as String
         val emotion = objArray[4] as String
         val event = objArray[5] as String
+        val durations = objArray[6] as FloatArray
         return OfflineRecognizerResult(
             text = text,
             tokens = tokens,
             timestamps = timestamps,
             lang = lang,
             emotion = emotion,
-            event = event
+            event = event,
+            durations = durations,
         )
     }
 
     fun decode(stream: OfflineStream) = decode(ptr, stream.ptr)
 
+    fun setConfig(config: OfflineRecognizerConfig) = setConfig(ptr, config)
+
     private external fun delete(ptr: Long)
 
     private external fun createStream(ptr: Long): Long
+
+    private external fun setConfig(ptr: Long, config: OfflineRecognizerConfig)
 
     private external fun newFromAsset(
         assetManager: AssetManager,
@@ -557,6 +585,150 @@ fun getOfflineModelConfig(type: Int): OfflineModelConfig? {
                 ),
                 tokens = "$modelDir/tokens.txt",
                 modelType = "nemo_transducer",
+            )
+        }
+
+        31 -> {
+            val modelDir = "sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03"
+            return OfflineModelConfig(
+                zipformerCtc = OfflineZipformerCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        32 -> {
+            val modelDir = "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8"
+            return OfflineModelConfig(
+                canary = OfflineCanaryModelConfig(
+                    encoder = "$modelDir/encoder.int8.onnx",
+                    decoder = "$modelDir/decoder.int8.onnx",
+                    srcLang = "en",
+                    tgtLang = "en",
+                    usePnc = true,
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        33 -> {
+            val modelDir = "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+            return OfflineModelConfig(
+                nemo = OfflineNemoEncDecCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        34 -> {
+            val modelDir = "sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8"
+            return OfflineModelConfig(
+                nemo = OfflineNemoEncDecCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        35 -> {
+            val modelDir = "sherpa-onnx-nemo-transducer-stt_pt_fastconformer_hybrid_large_pc-int8"
+            return OfflineModelConfig(
+                transducer = OfflineTransducerModelConfig(
+                    encoder = "$modelDir/encoder.int8.onnx",
+                    decoder = "$modelDir/decoder.int8.onnx",
+                    joiner = "$modelDir/joiner.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+                modelType = "nemo_transducer",
+            )
+        }
+
+        36 -> {
+            val modelDir = "sherpa-onnx-nemo-stt_pt_fastconformer_hybrid_large_pc-int8"
+            return OfflineModelConfig(
+                nemo = OfflineNemoEncDecCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        37 -> {
+            val modelDir = "sherpa-onnx-nemo-transducer-stt_de_fastconformer_hybrid_large_pc-int8"
+            return OfflineModelConfig(
+                transducer = OfflineTransducerModelConfig(
+                    encoder = "$modelDir/encoder.int8.onnx",
+                    decoder = "$modelDir/decoder.int8.onnx",
+                    joiner = "$modelDir/joiner.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+                modelType = "nemo_transducer",
+            )
+        }
+
+        38 -> {
+            val modelDir = "sherpa-onnx-nemo-stt_de_fastconformer_hybrid_large_pc-int8"
+            return OfflineModelConfig(
+                nemo = OfflineNemoEncDecCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        39 -> {
+            val modelDir = "sherpa-onnx-zipformer-ctc-small-zh-int8-2025-07-16"
+            return OfflineModelConfig(
+                zipformerCtc = OfflineZipformerCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        40 -> {
+            val modelDir = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+            return OfflineModelConfig(
+                transducer = OfflineTransducerModelConfig(
+                    encoder = "$modelDir/encoder.int8.onnx",
+                    decoder = "$modelDir/decoder.int8.onnx",
+                    joiner = "$modelDir/joiner.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+                modelType = "nemo_transducer",
+            )
+        }
+
+        41 -> {
+            val modelDir = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
+            return OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        42 -> {
+            val modelDir = "sherpa-onnx-wenetspeech-yue-u2pp-conformer-ctc-zh-en-cantonese-int8-2025-09-10"
+            return OfflineModelConfig(
+                wenetCtc = OfflineWenetCtcModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+            )
+        }
+
+        43 -> {
+            val modelDir = "sherpa-onnx-paraformer-zh-int8-2025-10-07"
+            return OfflineModelConfig(
+                paraformer = OfflineParaformerModelConfig(
+                    model = "$modelDir/model.int8.onnx",
+                ),
+                tokens = "$modelDir/tokens.txt",
+                modelType = "paraformer",
             )
         }
     }

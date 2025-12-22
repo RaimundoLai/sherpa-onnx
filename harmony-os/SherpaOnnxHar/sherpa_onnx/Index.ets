@@ -1,20 +1,23 @@
 export { listRawfileDir, readWave, readWaveFromBinary, } from "libsherpa_onnx.so";
 
-export { CircularBuffer, SileroVadConfig, SpeechSegment, Vad, VadConfig, } from './src/main/ets/components/Vad';
+export { CircularBuffer, SileroVadConfig, TenVadConfig, SpeechSegment, Vad, VadConfig, } from './src/main/ets/components/Vad';
 
 
 export { Samples,
   OfflineStream,
   FeatureConfig,
   HomophoneReplacerConfig,
+  OfflineCanaryModelConfig,
   OfflineDolphinModelConfig,
   OfflineTransducerModelConfig,
   OfflineParaformerModelConfig,
   OfflineNemoEncDecCtcModelConfig,
   OfflineWhisperModelConfig,
   OfflineTdnnModelConfig,
-  OfflineSenseVoiceModelConfig,
   OfflineMoonshineModelConfig,
+  OfflineSenseVoiceModelConfig,
+  OfflineWenetCtcModelConfig,
+  OfflineZipformerCtcModelConfig,
   OfflineModelConfig,
   OfflineLMConfig,
   OfflineRecognizerConfig,
@@ -23,8 +26,10 @@ export { Samples,
 } from './src/main/ets/components/NonStreamingAsr';
 
 export { OnlineStream,
-  OnlineTransducerModelConfig,
+  OnlineNemoCtcModelConfig,
   OnlineParaformerModelConfig,
+  OnlineToneCtcModelConfig,
+  OnlineTransducerModelConfig,
   OnlineZipformer2CtcModelConfig,
   OnlineModelConfig,
   OnlineCtcFstDecoderConfig,
@@ -33,7 +38,8 @@ export { OnlineStream,
   OnlineRecognizer,
 } from './src/main/ets/components/StreamingAsr';
 
-export { OfflineTtsKokoroModelConfig,
+export { OfflineTtsKittenModelConfig,
+  OfflineTtsKokoroModelConfig,
   OfflineTtsMatchaModelConfig,
   OfflineTtsVitsModelConfig,
   OfflineTtsModelConfig,

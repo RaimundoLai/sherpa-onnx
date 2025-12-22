@@ -7,7 +7,7 @@ import "dart:io";
 
 // Copy the asset file from src to dst
 Future<String> copyAssetFile(String src, [String? dst]) async {
-  final Directory directory = await getApplicationDocumentsDirectory();
+  final Directory directory = await getApplicationSupportDirectory();
   if (dst == null) {
     dst = basename(src);
   }
@@ -32,7 +32,7 @@ Float32List convertBytesToFloat32(Uint8List bytes, [endian = Endian.little]) {
 
   for (var i = 0; i < bytes.length; i += 2) {
     int short = data.getInt16(i, endian);
-    values[i ~/ 2] = short / 32678.0;
+    values[i ~/ 2] = short / 32768.0;
   }
 
   return values;

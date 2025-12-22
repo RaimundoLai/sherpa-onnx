@@ -45,6 +45,8 @@ class Model:
 
     rule_fsts: str = ""
 
+    use_hr: bool = False
+
 
 # See get_2nd_models() in ./generate-asr-2pass-apk-script.py
 def get_models():
@@ -97,7 +99,8 @@ def get_models():
             idx=15,
             lang="zh_en_ko_ja_yue",
             lang2="中英粤日韩",
-            short_name="sense_voice",
+            short_name="sense_voice_2024_07_17_int8",
+            use_hr=True,
             cmd="""
             pushd $model_name
 
@@ -538,6 +541,201 @@ def get_models():
             lang="en",
             lang2="English",
             short_name="parakeet_tdt_0.6b_v2",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03",
+            idx=31,
+            lang="zh",
+            lang2="Chinese",
+            short_name="zipformer_2025_07_03",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+            rm -rfv bbpe.model
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8",
+            idx=33,
+            lang="en",
+            lang2="English",
+            short_name="parakeet_tdt_ctc_110m",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8",
+            idx=34,
+            lang="ja",
+            lang2="Japanese",
+            short_name="parakeet-tdt_ctc_0.6b_ja",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-transducer-stt_pt_fastconformer_hybrid_large_pc-int8",
+            idx=35,
+            lang="pt",
+            lang2="Portuguese",
+            short_name="stt_pt_fastconformer_hybrid_large_pc_transducer_int8",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-stt_pt_fastconformer_hybrid_large_pc-int8",
+            idx=36,
+            lang="pt",
+            lang2="Portuguese",
+            short_name="stt_pt_fastconformer_hybrid_large_pc_ctc-int8",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-transducer-stt_de_fastconformer_hybrid_large_pc-int8",
+            idx=37,
+            lang="de",
+            lang2="German",
+            short_name="stt_de_fastconformer_hybrid_large_pc_transducer_int8",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-stt_de_fastconformer_hybrid_large_pc-int8",
+            idx=38,
+            lang="de",
+            lang2="German",
+            short_name="stt_de_fastconformer_hybrid_large_pc_ctc-int8",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-zipformer-ctc-small-zh-int8-2025-07-16",
+            idx=39,
+            lang="zh",
+            lang2="Chinese",
+            short_name="zipformer_ctc_small_2025_07_16",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+            rm -rfv bbpe.model
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
+            idx=40,
+            lang="multi",
+            lang2="25_languages",
+            short_name="parakeet_tdt_0.6b_v3",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09",
+            idx=41,
+            lang="zh_en_ko_ja_yue",
+            lang2="中英粤日韩",
+            short_name="sense_voice_2025_09_09_int8",
+            use_hr=True,
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-wenetspeech-yue-u2pp-conformer-ctc-zh-en-cantonese-int8-2025-09-10",
+            idx=42,
+            lang="zh_en_yue",
+            lang2="中英粤",
+            short_name="wenetspeech_yue_u2pconformer_ctc_2025_09_10_int8",
+            cmd="""
+            pushd $model_name
+
+            rm -rfv test_wavs
+
+            ls -lh
+
+            popd
+            """,
+        ),
+        Model(
+            model_name="sherpa-onnx-paraformer-zh-int8-2025-10-07",
+            idx=43,
+            lang="zh",
+            lang2="四川话",
+            short_name="paraformer_四川话",
             cmd="""
             pushd $model_name
 

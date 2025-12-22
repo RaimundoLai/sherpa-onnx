@@ -356,46 +356,41 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
     if (meta_data.version >= 2) {
       // this is a multi-lingual model, we require that you pass lexicon
-      // and dict_dir
-      if (config_.model.kokoro.lexicon.empty() ||
-          config_.model.kokoro.dict_dir.empty()) {
+      if (config_.model.kokoro.lexicon.empty() &&
+          config_.model.kokoro.lang.empty()) {
         SHERPA_ONNX_LOGE("Current model version: '%d'", meta_data.version);
         SHERPA_ONNX_LOGE(
             "You are using a multi-lingual Kokoro model (e.g., Kokoro >= "
-            "v1.0). please pass --kokoro-lexicon and --kokoro-dict-dir");
+            "v1.0). Please pass --kokoro-lexicon or provide --kokoro-lang");
         SHERPA_ONNX_EXIT(-1);
       }
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
-          mgr, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
-          config_.model.kokoro.dict_dir, config_.model.kokoro.data_dir,
+          mgr, config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
           meta_data, config_.model.debug);
 
       return;
     }
 
     frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-        mgr, config_.model.kokoro.tokens, config_.model.kokoro.data_dir,
-        meta_data);
+        mgr, config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, meta_data);
   }
 
   void InitFrontend() {
     const auto &meta_data = model_->GetMetaData();
     if (meta_data.version >= 2) {
       // this is a multi-lingual model, we require that you pass lexicon
-      // and dict_dir
-      if (config_.model.kokoro.lexicon.empty() ||
-          config_.model.kokoro.dict_dir.empty()) {
+      if (config_.model.kokoro.lexicon.empty() &&
+          config_.model.kokoro.lang.empty()) {
         SHERPA_ONNX_LOGE("Current model version: '%d'", meta_data.version);
         SHERPA_ONNX_LOGE(
             "You are using a multi-lingual Kokoro model (e.g., Kokoro >= "
-            "v1.0). please pass --kokoro-lexicon and --kokoro-dict-dir");
+            "v1.0). please pass --kokoro-lexicon or --kokoro-lang");
         SHERPA_ONNX_EXIT(-1);
       }
 
       frontend_ = std::make_unique<KokoroMultiLangLexicon>(
-          config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
-          config_.model.kokoro.dict_dir, config_.model.kokoro.data_dir,
+          config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, config_.model.kokoro.lexicon,
           meta_data, config_.model.debug);
 
       return;
@@ -403,7 +398,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
     // this is for kokoro v0.19, which supports only English
     frontend_ = std::make_unique<PiperPhonemizeLexicon>(
-        config_.model.kokoro.tokens, config_.model.kokoro.data_dir, meta_data);
+      config_.model.kokoro.g2p_model, config_.model.kokoro.tokens, meta_data);
   }
 
   GeneratedAudio Process(const std::vector<std::vector<int64_t>> &tokens,

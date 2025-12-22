@@ -26,7 +26,6 @@ static SherpaOnnxOfflineTtsVitsModelConfig GetOfflineTtsVitsModelConfig(
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(noise_scale, noiseScale);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(noise_scale_w, noiseScaleW);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(length_scale, lengthScale);
-  SHERPA_ONNX_ASSIGN_ATTR_STR(dict_dir, dictDir);
 
   return c;
 }
@@ -48,7 +47,6 @@ static SherpaOnnxOfflineTtsMatchaModelConfig GetOfflineTtsMatchaModelConfig(
   SHERPA_ONNX_ASSIGN_ATTR_STR(data_dir, dataDir);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(noise_scale, noiseScale);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(length_scale, lengthScale);
-  SHERPA_ONNX_ASSIGN_ATTR_STR(dict_dir, dictDir);
 
   return c;
 }
@@ -68,8 +66,49 @@ static SherpaOnnxOfflineTtsKokoroModelConfig GetOfflineTtsKokoroModelConfig(
   SHERPA_ONNX_ASSIGN_ATTR_STR(tokens, tokens);
   SHERPA_ONNX_ASSIGN_ATTR_STR(data_dir, dataDir);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(length_scale, lengthScale);
-  SHERPA_ONNX_ASSIGN_ATTR_STR(dict_dir, dictDir);
   SHERPA_ONNX_ASSIGN_ATTR_STR(lexicon, lexicon);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(g2p_model, g2p_model);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(lang, lang);
+
+  return c;
+}
+static SherpaOnnxOfflineTtsChatterboxModelConfig GetOfflineTtsChatterboxModelConfig(
+    Napi::Object obj) {
+  SherpaOnnxOfflineTtsChatterboxModelConfig c;
+  memset(&c, 0, sizeof(c));
+
+  if (!obj.Has("chatterbox") || !obj.Get("chatterbox").IsObject()) {
+    return c;
+  }
+
+  Napi::Object o = obj.Get("chatterbox").As<Napi::Object>();
+  SHERPA_ONNX_ASSIGN_ATTR_STR(speech_encoder, speechEncoder);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(embed_tokens, embedTokens);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(language_model, languageModel);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(conditional_decoder, conditionalDecoder);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(tokenizer, tokenizer);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(lang, lang);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(lexicon, lexicon);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(cangjie_dict, cangjieDict);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(perth_watermarker, perthWatermarker);
+
+  return c;
+}
+static SherpaOnnxOfflineTtsKittenModelConfig GetOfflineTtsKittenModelConfig(
+    Napi::Object obj) {
+  SherpaOnnxOfflineTtsKittenModelConfig c;
+  memset(&c, 0, sizeof(c));
+
+  if (!obj.Has("kitten") || !obj.Get("kitten").IsObject()) {
+    return c;
+  }
+
+  Napi::Object o = obj.Get("kitten").As<Napi::Object>();
+  SHERPA_ONNX_ASSIGN_ATTR_STR(model, model);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(voices, voices);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(tokens, tokens);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(data_dir, dataDir);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(length_scale, lengthScale);
 
   return c;
 }
@@ -88,6 +127,8 @@ static SherpaOnnxOfflineTtsModelConfig GetOfflineTtsModelConfig(
   c.vits = GetOfflineTtsVitsModelConfig(o);
   c.matcha = GetOfflineTtsMatchaModelConfig(o);
   c.kokoro = GetOfflineTtsKokoroModelConfig(o);
+  c.kitten = GetOfflineTtsKittenModelConfig(o);
+  c.chatterbox = GetOfflineTtsChatterboxModelConfig(o);
 
   SHERPA_ONNX_ASSIGN_ATTR_INT32(num_threads, numThreads);
 
@@ -162,21 +203,34 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.lexicon);
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.tokens);
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.data_dir);
-  SHERPA_ONNX_DELETE_C_STR(c.model.vits.dict_dir);
 
   SHERPA_ONNX_DELETE_C_STR(c.model.matcha.acoustic_model);
   SHERPA_ONNX_DELETE_C_STR(c.model.matcha.vocoder);
   SHERPA_ONNX_DELETE_C_STR(c.model.matcha.lexicon);
   SHERPA_ONNX_DELETE_C_STR(c.model.matcha.tokens);
   SHERPA_ONNX_DELETE_C_STR(c.model.matcha.data_dir);
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.dict_dir);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.voices);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.data_dir);
 
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.model);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.voices);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.data_dir);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.dict_dir);
   SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.g2p_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lang);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.speech_encoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.embed_tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.language_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.conditional_decoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.tokenizer);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lang);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.cangjie_dict);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.perth_watermarker);
 
   SHERPA_ONNX_DELETE_C_STR(c.model.provider);
 
@@ -429,7 +483,7 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
   TtsGenerateWorker(const Napi::Env &env, TSFN tsfn,
                     const SherpaOnnxOfflineTts *tts, const std::string &text,
                     float speed, int32_t sid, bool use_external_buffer, bool g2p,
-                    const std::string &lang)
+                    const std::string &lang, const std::string &audio_dir, const std::string &type, float exaggeration)
       : tsfn_(tsfn),
         Napi::AsyncWorker{env, "TtsGenerateWorker"},
         deferred_(env),
@@ -439,7 +493,10 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
         sid_(sid),
         use_external_buffer_(use_external_buffer),
         g2p_(g2p),
-        lang_(lang) {}
+        lang_(lang),
+        audio_dir(audio_dir),
+        type(type),
+        exaggeration_(exaggeration) {}
 
   Napi::Promise Promise() { return deferred_.Promise(); }
 
@@ -473,8 +530,13 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
 
       return 1;
     };
-    audio_ = SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
+    if(type == "chatterbox") {
+      audio_ = SherpaOnnxOfflineTtsGenerateWithChatterbox(
+        tts_, text_.c_str(), audio_dir.c_str(), speed_, lang_.c_str(), exaggeration_, callback, this);
+    } else {
+      audio_ = SherpaOnnxOfflineTtsGenerateWithProgressCallbackWithArg(
         tts_, text_.c_str(), sid_, speed_,g2p_, lang_.c_str(), callback, this);
+    }
 
     tsfn_.Release();
   }
@@ -524,6 +586,9 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
   bool use_external_buffer_;
   bool g2p_;
   std::string lang_;
+  std::string audio_dir;
+  std::string type;
+  float exaggeration_;
 
   const SherpaOnnxGeneratedAudio *audio_;
 
@@ -628,7 +693,22 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
   if (obj.Has("callback") && obj.Get("callback").IsFunction()) {
     cb = obj.Get("callback").As<Napi::Function>();
   }
-
+  
+  std::string audio_dir;
+  if (obj.Has("audioDir") && obj.Get("audioDir").IsString()) {
+    Napi::String _audio_dir = obj.Get("audioDir").As<Napi::String>();
+    audio_dir = _audio_dir.Utf8Value();
+  }
+  std::string type = "normal";
+  if (obj.Has("type") && obj.Get("type").IsString()) {
+    Napi::String _type = obj.Get("type").As<Napi::String>();
+    type = _type.Utf8Value();
+  }
+  float exaggeration = 0.5;
+  if (obj.Has("exaggeration") && obj.Get("exaggeration").IsNumber()) {
+    exaggeration = obj.Get("exaggeration").As<Napi::Number>().FloatValue();
+  }
+  
   auto context =
       new Napi::Reference<Napi::Value>(Napi::Persistent(info.This()));
 
@@ -642,7 +722,7 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
       [](Napi::Env, void *, Napi::Reference<Napi::Value> *ctx) { delete ctx; });
 
   TtsGenerateWorker *worker = new TtsGenerateWorker(
-      env, tsfn, tts, text, speed, sid, enable_external_buffer, g2p, lang);
+      env, tsfn, tts, text, speed, sid, enable_external_buffer, g2p, lang, audio_dir, type, exaggeration);
   worker->Queue();
   return worker->Promise();
 }

@@ -135,6 +135,7 @@ us_silver.json
 kokoro-multi-lang-v1_0
 sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16
 cmake-build-debug
+cmake-build-release
 README-DEV.txt
 *.rknn
 *.jit
@@ -142,3 +143,16 @@ README-DEV.txt
 .idea
 sherpa-onnx-dolphin-base-ctc-multi-lang-int8-2025-04-02
 dict
+*.npz
+voices.bin
+kitten-nano-en-v0_1-fp16
+*.egg-info
+*.jar
+vocab.json
+*.so
+sherpa-onnx-streaming-t-one-russian-2025-09-08
+sherpa-onnx-wenetspeech-yue-u2pp-conformer-ctc-zh-en-cantonese-int8-2025-09-10
+am.mvn
+*bpe.model
+config.yaml
+configuration.json

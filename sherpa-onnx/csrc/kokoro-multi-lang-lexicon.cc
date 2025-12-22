@@ -7,9 +7,13 @@
 #include <fstream>
 #include <regex>  // NOLINT
 #include <sstream>
+#include <string>
 #include <strstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <mutex>
+#include <vector>
 
 #if __ANDROID_API__ >= 9
 #include "android/asset_manager.h"
@@ -22,49 +26,38 @@
 
 #include <codecvt>
 
-#include "espeak-ng/speak_lib.h"
-#include "phoneme_ids.hpp"
-#include "phonemize.hpp"
 #include "sherpa-onnx/csrc/file-utils.h"
-#include "sherpa-onnx/csrc/jieba.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
+#include "sherpa-onnx/csrc/phrase-matcher.h"
 #include "sherpa-onnx/csrc/symbol-table.h"
 #include "sherpa-onnx/csrc/text-utils.h"
+#include "sherpa-onnx/csrc/tokenizer.h"
 
 namespace sherpa_onnx {
 
-void CallPhonemizeEspeak(const std::string &text,
-                         piper::eSpeakPhonemeConfig &config,  // NOLINT
-                         std::vector<std::vector<piper::Phoneme>> *phonemes);
-
 class KokoroMultiLangLexicon::Impl {
  public:
-  Impl(const std::string &tokens, const std::string &lexicon,
-       const std::string &dict_dir, const std::string &data_dir,
-       const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+  Impl(const std::string &g2p_model,
+       const std::string &tokens, const std::string &lexicon,const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
       : meta_data_(meta_data), debug_(debug) {
     InitTokens(tokens);
 
     InitLexicon(lexicon);
 
-    jieba_ = InitJieba(dict_dir);
-
-    InitEspeak(data_dir);  // See ./piper-phonemize-lexicon.cc
+    g2p_tokenizer_ = CreateTokenizer(g2p_model, token2id_);
   }
 
   template <typename Manager>
-  Impl(Manager *mgr, const std::string &tokens, const std::string &lexicon,
-       const std::string &dict_dir, const std::string &data_dir,
-       const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
+  Impl(Manager *mgr, const std::string &g2p_model,
+       const std::string &tokens, const std::string &lexicon, const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
       : meta_data_(meta_data), debug_(debug) {
     InitTokens(mgr, tokens);
 
     InitLexicon(mgr, lexicon);
 
-    // we assume you have copied dict_dir and data_dir from assets to some path
-    jieba_ = InitJieba(dict_dir);
+    // we assume you have copied data_dir from assets to some path
 
-    InitEspeak(data_dir);  // See ./piper-phonemize-lexicon.cc
+    g2p_tokenizer_ = CreateTokenizer(g2p_model, token2id_);
   }
 
   std::string DetectLanguage(const std::string &text, const std::string &default_voice) const {
@@ -404,7 +397,7 @@ class KokoroMultiLangLexicon::Impl {
               if (debug_) {
                 SHERPA_ONNX_LOGE("Use espeak-ng to handle the OOV CJK character: '%s'", c.c_str());
               }
-              ProcessWithEspeak(c, voice, &ans);
+              ProcessWithG2p(c, &ans, voice);
             }
           }
         } else {
@@ -412,7 +405,7 @@ class KokoroMultiLangLexicon::Impl {
           if (debug_) {
             SHERPA_ONNX_LOGE("Use espeak-ng to handle the OOV word: '%s'", word.c_str());
           }
-          ProcessWithEspeak(word, detected_voice, &ans);
+          ProcessWithG2p(word, &ans, voice);
         }
       }
     } else {
@@ -420,50 +413,55 @@ class KokoroMultiLangLexicon::Impl {
         SHERPA_ONNX_LOGE("Use espeak-ng to handle the OOV word: '%s'", w.c_str());
       }
       std::string detected_voice = DetectLanguage(w, voice);
-      ProcessWithEspeak(w, detected_voice, &ans);
+      ProcessWithG2p(w, &ans, voice);
     }
 
     return ans;
   }
-  
-  void ProcessWithEspeak(const std::string &text, const std::string &voice, std::vector<int32_t> *ans) const {
-    piper::eSpeakPhonemeConfig config;
-    config.voice = voice.empty() ? meta_data_.voice : voice;
-
-    std::vector<std::vector<piper::Phoneme>> phonemes;
-    CallPhonemizeEspeak(text, config, &phonemes);
-
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
-    for (const auto &v : phonemes) {
-      for (const auto p : v) {
-        auto token = conv.to_bytes(p);
-        if (token2id_.count(token)) {
-          ans->push_back(token2id_.at(token));
-        } else {
-          if (debug_) {
-            SHERPA_ONNX_LOGE("Skip OOV token '%s' from '%s'", token.c_str(), text.c_str());
+  void ProcessWithG2p(const std::string &text, std::vector<int32_t> *ans, const std::string &lang) const {
+    if (debug_) {
+      SHERPA_ONNX_LOGE("before process g2p word: '%s'", text.c_str());
+    }
+    std::vector<int64_t> ids = g2p_tokenizer_->Tokenize(text, lang);
+    ans->insert(ans->end(), ids.begin(), ids.end());
+    if (debug_) {
+      std::unordered_map<int32_t, std::string> id2words_;
+    
+      for (const auto& pair : token2id_) {
+          id2words_[pair.second] = pair.first;
+      }
+      
+      SHERPA_ONNX_LOGE("after process g2p, result size: %zu", ans->size());
+      for (size_t i = 0; i < ans->size(); ++i) {
+          SHERPA_ONNX_LOGE("ans[%zu] = %d", i, (*ans)[i]);
+          auto it = id2words_.find((*ans)[i]);
+          if (it != id2words_.end()) {
+              SHERPA_ONNX_LOGE("  word: %s", it->second.c_str());
+          } else {
+              SHERPA_ONNX_LOGE("  word: <unknown>");
           }
-        }
       }
     }
   }
 
   std::vector<std::vector<int32_t>> ConvertChineseToTokenIDs(
       const std::string &text, const std::string &voice = "en-us") const {
-    bool is_hmm = true;
+    std::vector<std::string> words = SplitUtf8(text);
 
-    std::vector<std::string> words;
-    jieba_->Cut(text, words, is_hmm);
     if (debug_) {
       std::ostringstream os;
-      os << "After jieba processing:\n";
-
-      std::string sep;
+      std::string sep = "";
       for (const auto &w : words) {
         os << sep << w;
         sep = "_";
       }
-      SHERPA_ONNX_LOGE("%s", os.str().c_str());
+
+#if __OHOS__
+      SHERPA_ONNX_LOGE("after splitting into UTF8:\n%{public}s",
+                       os.str().c_str());
+#else
+      SHERPA_ONNX_LOGE("after splitting into UTF8:\n%s", os.str().c_str());
+#endif
     }
 
     std::vector<std::vector<int32_t>> ans;
@@ -471,16 +469,29 @@ class KokoroMultiLangLexicon::Impl {
     int32_t max_len = meta_data_.max_token_len;
 
     this_sentence.push_back(0);
-    for (const auto &w : words) {
-      auto ids = ConvertWordToIds(w, voice);
-      if (this_sentence.size() + ids.size() > max_len - 2) {
-        this_sentence.push_back(0);
-        ans.push_back(std::move(this_sentence));
+	  PhraseMatcher matcher(&all_words_, words, debug_);
+    for (const auto &w : matcher) {
+      if(voice == "yue") {
+        std::vector<int32_t> ids;
+        ProcessWithG2p(w, &ids, voice);
 
-        this_sentence.push_back(0);
+        if (this_sentence.size() + ids.size() > max_len - 2) {
+          this_sentence.push_back(0);
+          ans.push_back(std::move(this_sentence));
+
+          this_sentence.push_back(0);
+        }
+        this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
+      } else {
+        auto ids = ConvertWordToIds(w, voice);
+        if (this_sentence.size() + ids.size() > max_len - 2) {
+          this_sentence.push_back(0);
+          ans.push_back(std::move(this_sentence));
+
+          this_sentence.push_back(0);
+        }
+        this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
       }
-
-      this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
     }
 
     if (this_sentence.size() > 1) {
@@ -607,31 +618,8 @@ class KokoroMultiLangLexicon::Impl {
                            word.c_str());
         }
 
-        piper::eSpeakPhonemeConfig config;
-        config.voice = voice.empty() ? meta_data_.voice : voice;
-
-        std::vector<std::vector<piper::Phoneme>> phonemes;
-
-        CallPhonemizeEspeak(word, config, &phonemes);
-        // Note phonemes[i] contains a vector of unicode codepoints;
-        // we need to convert them to utf8
-
-        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
-
         std::vector<int32_t> ids;
-        for (const auto &v : phonemes) {
-          for (const auto p : v) {
-            auto token = conv.to_bytes(p);
-            if (token2id_.count(token)) {
-              ids.push_back(token2id_.at(token));
-            } else {
-              if (debug_) {
-                SHERPA_ONNX_LOGE("Skip OOV token '%s' from '%s'", token.c_str(),
-                                 word.c_str());
-              }
-            }
-          }
-        }
+        ProcessWithG2p(word, &ids, effective_voice);
 
         if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
           this_sentence.push_back(0);
@@ -667,6 +655,7 @@ class KokoroMultiLangLexicon::Impl {
     return ans;
   }
 
+
   void InitTokens(const std::string &tokens) {
     std::ifstream is(tokens);
     InitTokens(is);
@@ -682,9 +671,30 @@ class KokoroMultiLangLexicon::Impl {
 
   void InitTokens(std::istream &is) {
     token2id_ = ReadTokens(is);  // defined in ./symbol-table.cc
+    token2id_["˥"] = 171; 
+    token2id_["˧"] = 171; 
+    token2id_["˨"] = 171;
+    token2id_["˩"] = 171;
+    token2id_["˧˥"] = 172;
+    token2id_["˩˦"] = 172;
+    token2id_["˦˥"] = 172;
+    token2id_["˥˩"] = 169;
+    token2id_["•"] = 173;
+    token2id_["ɵ"] = 116;
+    token2id_["ɭ"] = 54;
+    token2id_["ɫ"] = 54;
+    token2id_["ɝ"] = 85;
+    token2id_["ʐ"] = 147;
+    token2id_["õ"] = 57;
+    token2id_.erase(":");
+
   }
 
   void InitLexicon(const std::string &lexicon) {
+    if (lexicon.empty()) {
+      return;
+    }
+
     std::vector<std::string> files;
     SplitStringToVector(lexicon, ",", false, &files);
     for (const auto &f : files) {
@@ -695,6 +705,10 @@ class KokoroMultiLangLexicon::Impl {
 
   template <typename Manager>
   void InitLexicon(Manager *mgr, const std::string &lexicon) {
+    if (lexicon.empty()) {
+      return;
+    }
+
     std::vector<std::string> files;
     SplitStringToVector(lexicon, ",", false, &files);
     for (const auto &f : files) {
@@ -736,7 +750,7 @@ class KokoroMultiLangLexicon::Impl {
 
       std::vector<int32_t> ids = ConvertTokensToIds(token2id_, token_list);
 
-      if (ids.empty()) {
+      if (ids.empty() && word != "呣") {
         SHERPA_ONNX_LOGE(
             "Invalid pronunciation for word '%s' at line %d:%s. Ignore it",
             word.c_str(), line_num, line.c_str());
@@ -745,6 +759,10 @@ class KokoroMultiLangLexicon::Impl {
 
       word2ids_.insert({std::move(word), std::move(ids)});
     }
+
+    for (const auto &[key, _] : word2ids_) {
+      all_words_.insert(key);
+    }
   }
 
  private:
@@ -752,30 +770,31 @@ class KokoroMultiLangLexicon::Impl {
 
   // word to token IDs
   std::unordered_map<std::string, std::vector<int32_t>> word2ids_;
+  std::unordered_set<std::string> all_words_;
 
   // tokens.txt is saved in token2id_
   std::unordered_map<std::string, int32_t> token2id_;
+  std::unordered_map<int32_t, std::string> id2token_;
 
-  std::unique_ptr<cppjieba::Jieba> jieba_;
+  std::unordered_map<char32_t, int32_t> phoneme2id_;
+
   bool debug_ = false;
+  std::unique_ptr<Tokenizer> g2p_tokenizer_;
 };
 
 KokoroMultiLangLexicon::~KokoroMultiLangLexicon() = default;
 
 KokoroMultiLangLexicon::KokoroMultiLangLexicon(
+    const std::string &g2p_model,
     const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
     const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
-    : impl_(std::make_unique<Impl>(tokens, lexicon, dict_dir, data_dir,
-                                   meta_data, debug)) {}
+    : impl_(std::make_unique<Impl>(g2p_model, tokens, lexicon, meta_data, debug)) {}
 
 template <typename Manager>
 KokoroMultiLangLexicon::KokoroMultiLangLexicon(
-    Manager *mgr, const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
+    Manager *mgr, const std::string &g2p_model, const std::string &tokens, const std::string &lexicon,
     const OfflineTtsKokoroModelMetaData &meta_data, bool debug)
-    : impl_(std::make_unique<Impl>(mgr, tokens, lexicon, dict_dir, data_dir,
-                                   meta_data, debug)) {}
+    : impl_(std::make_unique<Impl>(mgr, g2p_model, tokens, lexicon, meta_data, debug)) {}
 
 std::vector<TokenIDs> KokoroMultiLangLexicon::ConvertTextToTokenIds(
     const std::string &text, const std::string &lang) const {
@@ -788,16 +807,14 @@ return impl_->ConvertPhonemeToTokenIds(text, lang);
 }
 #if __ANDROID_API__ >= 9
 template KokoroMultiLangLexicon::KokoroMultiLangLexicon(
-    AAssetManager *mgr, const std::string &tokens, const std::string &lexicon,
-    const std::string &dict_dir, const std::string &data_dir,
+    AAssetManager *mgr, const std::string &g2p_model, const std::string &tokens, const std::string &lexicon,
     const OfflineTtsKokoroModelMetaData &meta_data, bool debug);
 #endif
 
 #if __OHOS__
 template KokoroMultiLangLexicon::KokoroMultiLangLexicon(
-    NativeResourceManager *mgr, const std::string &tokens,
-    const std::string &lexicon, const std::string &dict_dir,
-    const std::string &data_dir, const OfflineTtsKokoroModelMetaData &meta_data,
+    NativeResourceManager *mgr, const std::string &g2p_model, const std::string &tokens,
+    const std::string &lexicon, const OfflineTtsKokoroModelMetaData &meta_data,
     bool debug);
 #endif
 

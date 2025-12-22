@@ -12,6 +12,7 @@
 
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
 #include "sherpa-onnx/csrc/parse-options.h"
+#include "sherpa-onnx/csrc/macros.h"
 
 namespace sherpa_onnx {
 
@@ -65,7 +66,7 @@ struct GeneratedAudio {
 
 class OfflineTtsImpl;
 
-// If the callback returns 0, then it stop generating
+// If the callback returns 0, then it stops generating
 // if the callback returns 1, then it keeps generating
 using GeneratedAudioCallback = std::function<int32_t(
     const float * /*samples*/, int32_t /*n*/, float /*progress*/)>;
@@ -94,6 +95,33 @@ class OfflineTts {
   GeneratedAudio Generate(const std::string &text, int64_t sid = 0,
                           float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
                           GeneratedAudioCallback callback = nullptr) const;
+
+  // @param text The string to be synthesized.
+  // @param prompt_text The transcribe of `prompt_sampes`.
+  // @param prompt_samples The prompt audio samples (mono PCM floats in [-1,1]).
+  // @param sample_rate The sample rate of `prompt_audio` in Hz.
+  // @param speed The speed for the generated speech. E.g., 2 means 2x faster.
+  // @param num_steps The number of flow steps to generate the audio.
+  // @param callback If not NULL, it is called whenever config.max_num_sentences
+  //                 sentences have been processed. Note that the passed
+  //                 pointer `samples` for the callback might be invalidated
+  //                 after the callback is returned, so the caller should not
+  //                 keep a reference to it. The caller can copy the data if
+  //                 he/she wants to access the samples after the callback
+  //                 returns. The callback is called in the current thread.
+  GeneratedAudio Generate(const std::string &text,
+                          const std::string &prompt_text,
+                          const std::vector<float> &prompt_samples,
+                          int32_t sample_rate, float speed = 1.0,
+                          int32_t num_steps = 4,
+                          GeneratedAudioCallback callback = nullptr) const;
+  GeneratedAudio Generate(
+      const std::string &text, 
+      const std::string &audio_dir,
+      float speed = 1.0, 
+      const std::string &lang = "en-us",
+      float exaggeration = 0.5f,
+      GeneratedAudioCallback callback = nullptr) const;
 
   // Return the sample rate of the generated audio
   int32_t SampleRate() const;

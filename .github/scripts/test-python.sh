@@ -8,6 +8,49 @@ log() {
   echo -e "$(date '+%Y-%m-%d %H:%M:%S') (${fname}:${BASH_LINENO[0]}:${FUNCNAME[1]}) $*"
 }
 
+log "test T-one"
+
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-t-one-russian-2025-09-08.tar.bz2
+tar xvf sherpa-onnx-streaming-t-one-russian-2025-09-08.tar.bz2
+rm sherpa-onnx-streaming-t-one-russian-2025-09-08.tar.bz2
+
+python3 ./python-api-examples/online-t-one-ctc-decode-files.py
+
+rm -rf sherpa-onnx-streaming-t-one-russian-2025-09-08
+
+log "test nemo canary"
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8.tar.bz2
+tar xvf sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8.tar.bz2
+rm sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8.tar.bz2
+python3 ./python-api-examples/offline-nemo-canary-decode-files.py
+rm -rf sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8
+
+log "test spleeter"
+
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems-fp16.tar.bz2
+tar xvf sherpa-onnx-spleeter-2stems-fp16.tar.bz2
+rm sherpa-onnx-spleeter-2stems-fp16.tar.bz2
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/qi-feng-le-zh.wav
+./python-api-examples/offline-source-separation-spleeter.py
+rm -rf sherpa-onnx-spleeter-2stems-fp16
+rm qi-feng-le-zh.wav
+
+log "test UVR"
+
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/UVR_MDXNET_9482.onnx
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/qi-feng-le-zh.wav
+./python-api-examples/offline-source-separation-uvr.py
+rm UVR_MDXNET_9482.onnx
+rm qi-feng-le-zh.wav
+
+mkdir source-separation
+
+mv spleeter-*.wav source-separation
+mv uvr-*.wav source-separation
+
+ls -lh source-separation
+
+
 log "test offline dolphin ctc"
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-dolphin-base-ctc-multi-lang-int8-2025-04-02.tar.bz2
 tar xvf sherpa-onnx-dolphin-base-ctc-multi-lang-int8-2025-04-02.tar.bz2
@@ -295,6 +338,25 @@ log "Offline TTS test"
 # test waves are saved in ./tts
 mkdir ./tts
 
+log "test kitten tts"
+
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kitten-nano-en-v0_1-fp16.tar.bz2
+tar xf kitten-nano-en-v0_1-fp16.tar.bz2
+rm kitten-nano-en-v0_1-fp16.tar.bz2
+
+python3 ./python-api-examples/offline-tts.py \
+  --debug=1 \
+  --kitten-model=./kitten-nano-en-v0_1-fp16/model.fp16.onnx \
+  --kitten-voices=./kitten-nano-en-v0_1-fp16/voices.bin \
+  --kitten-tokens=./kitten-nano-en-v0_1-fp16/tokens.txt \
+  --kitten-data-dir=./kitten-nano-en-v0_1-fp16/espeak-ng-data \
+  --num-threads=2 \
+  --sid=0 \
+  --output-filename="./tts/kitten-0.wav" \
+  "Today as always, men fall into two groups: slaves and free men. Whoever does not have two-thirds of his day for himself, is a slave, whatever he may be: a statesman, a businessman, an official, or a scholar."
+
+rm -rf kitten-nano-en-v0_1-fp16
+
 log "kokoro-multi-lang-v1_0 test"
 
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
@@ -307,7 +369,6 @@ python3 ./python-api-examples/offline-tts.py \
   --kokoro-voices=./kokoro-multi-lang-v1_0/voices.bin \
   --kokoro-tokens=./kokoro-multi-lang-v1_0/tokens.txt \
   --kokoro-data-dir=./kokoro-multi-lang-v1_0/espeak-ng-data \
-  --kokoro-dict-dir=./kokoro-multi-lang-v1_0/dict \
   --kokoro-lexicon=./kokoro-multi-lang-v1_0/lexicon-us-en.txt,./kokoro-multi-lang-v1_0/lexicon-zh.txt \
   --num-threads=2 \
   --sid=18 \
@@ -369,7 +430,6 @@ python3 ./python-api-examples/offline-tts.py \
  --matcha-lexicon=./matcha-icefall-zh-baker/lexicon.txt \
  --matcha-tokens=./matcha-icefall-zh-baker/tokens.txt \
  --tts-rule-fsts=./matcha-icefall-zh-baker/phone.fst,./matcha-icefall-zh-baker/date.fst,./matcha-icefall-zh-baker/number.fst \
- --matcha-dict-dir=./matcha-icefall-zh-baker/dict \
  --output-filename=./tts/test-matcha-baker-zh.wav \
  "某某银行的副行长和一些行政领导表示，他们去过长江和长白山; 经济不断增长。2024年12月31号，拨打110或者18920240511。123456块钱。"
 
@@ -529,9 +589,39 @@ python3 ./python-api-examples/offline-decode-files.py \
   $repo/test_wavs/1.wav \
   $repo/test_wavs/8k.wav
 
+lm_repo_url=https://huggingface.co/ezerhouni/icefall-librispeech-rnn-lm
+log "Download pre-trained RNN-LM model from ${lm_repo_url}"
+GIT_LFS_SKIP_SMUDGE=1 git clone $lm_repo_url
+lm_repo=$(basename $lm_repo_url)
+pushd $lm_repo
+git lfs pull --include "exp/no-state-epoch-99-avg-1.onnx"
+popd
+
+bigram_repo_url=https://huggingface.co/vsd-vector/librispeech_bigram_sherpa-onnx-zipformer-large-en-2023-06-26
+log "Download bi-gram LM from ${bigram_repo_url}"
+GIT_LFS_SKIP_SMUDGE=1 git clone $bigram_repo_url
+bigramlm_repo=$(basename $bigram_repo_url)
+pushd $bigramlm_repo
+git lfs pull --include "2gram.fst"
+popd
+
+log "Perform offline decoding with RNN-LM and LODR"
+python3 ./python-api-examples/offline-decode-files.py \
+  --tokens=$repo/tokens.txt \
+  --encoder=$repo/encoder-epoch-99-avg-1.onnx \
+  --decoder=$repo/decoder-epoch-99-avg-1.onnx \
+  --joiner=$repo/joiner-epoch-99-avg-1.onnx \
+  --decoding-method=modified_beam_search \
+  --lm=$lm_repo/exp/no-state-epoch-99-avg-1.onnx \
+  --lodr-fst=$bigramlm_repo/2gram.fst \
+  --lodr-scale=-0.5 \
+  $repo/test_wavs/0.wav \
+  $repo/test_wavs/1.wav \
+  $repo/test_wavs/8k.wav
+
 python3 sherpa-onnx/python/tests/test_offline_recognizer.py --verbose
 
-rm -rf $repo
+rm -rf $repo $lm_repo $bigramlm_repo
 
 log "Test non-streaming paraformer models"
 

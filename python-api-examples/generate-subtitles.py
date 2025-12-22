@@ -19,6 +19,12 @@ For instance,
 
 wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
 
+or download ten-vad.onnx, for instance
+
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/ten-vad.onnx
+
+Please replace --silero-vad-model with --ten-vad-model below to use ten-vad.
+
 (1) For paraformer
 
     ./python-api-examples/generate-subtitles.py  \
@@ -93,9 +99,20 @@ wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_v
 
 ./python-api-examples/generate-subtitles.py  \
   --silero-vad-model=/path/to/silero_vad.onnx \
-  --wenet-ctc=./sherpa-onnx-zh-wenet-wenetspeech/model.onnx \
-  --tokens=./sherpa-onnx-zh-wenet-wenetspeech/tokens.txt \
+  --wenet-ctc=./sherpa-onnx-wenetspeech-yue-u2pp-conformer-ctc-zh-en-cantonese-int8-2025-09-10/model.int8.onnx \
+  --tokens=./sherpa-onnx-wenetspeech-yue-u2pp-conformer-ctc-zh-en-cantonese-int8-2025-09-10/tokens.txt \
   --num-threads=2 \
+  /path/to/test.mp4
+
+(8) For NeMo Parakeet TDT models
+
+./python-api-examples/generate-subtitles.py  \
+  --silero-vad-model=./silero_vad.onnx \
+  --encoder ./sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/encoder.int8.onnx \
+  --decoder ./sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/decoder.int8.onnx \
+  --joiner ./sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/joiner.int8.onnx \
+  --tokens ./sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/tokens.txt \
+  --model-type nemo_transducer \
   /path/to/test.mp4
 
 Please refer to
@@ -124,8 +141,13 @@ def get_args():
     parser.add_argument(
         "--silero-vad-model",
         type=str,
-        required=True,
-        help="Path to silero_vad.onnx",
+        help="Path to silero_vad.onnx.",
+    )
+
+    parser.add_argument(
+        "--ten-vad-model",
+        type=str,
+        help="Path to ten-vad.onnx",
     )
 
     parser.add_argument(
@@ -153,6 +175,13 @@ def get_args():
         default="",
         type=str,
         help="Path to the transducer joiner model",
+    )
+
+    parser.add_argument(
+        "--model-type",
+        default="",
+        type=str,
+        help="If using NeMo transducer models, please set it to nemo_transducer",
     )
 
     parser.add_argument(
@@ -345,6 +374,7 @@ def create_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             decoder=args.decoder,
             joiner=args.joiner,
             tokens=args.tokens,
+            model_type=args.model_type,
             num_threads=args.num_threads,
             sample_rate=args.sample_rate,
             feature_dim=args.feature_dim,
@@ -499,7 +529,12 @@ class Segment:
 def main():
     args = get_args()
     assert_file_exists(args.tokens)
-    assert_file_exists(args.silero_vad_model)
+    if args.silero_vad_model:
+        assert_file_exists(args.silero_vad_model)
+    elif args.ten_vad_model:
+        assert_file_exists(args.ten_vad_model)
+    else:
+        raise ValueError("You need to supply one vad model")
 
     assert args.num_threads > 0, args.num_threads
 
@@ -536,18 +571,34 @@ def main():
     stream = recognizer.create_stream()
 
     config = sherpa_onnx.VadModelConfig()
-    config.silero_vad.model = args.silero_vad_model
-    config.silero_vad.threshold = 0.5
-    config.silero_vad.min_silence_duration = 0.25  # seconds
-    config.silero_vad.min_speech_duration = 0.25  # seconds
+    if args.silero_vad_model:
+        config.silero_vad.model = args.silero_vad_model
+        config.silero_vad.threshold = 0.2
+        config.silero_vad.min_silence_duration = 0.25  # seconds
+        config.silero_vad.min_speech_duration = 0.25  # seconds
 
-    # If the current segment is larger than this value, then it increases
-    # the threshold to 0.9 internally. After detecting this segment,
-    # it resets the threshold to its original value.
-    config.silero_vad.max_speech_duration = 5  # seconds
-    config.sample_rate = args.sample_rate
+        # If the current segment is larger than this value, then it increases
+        # the threshold to 0.9 internally. After detecting this segment,
+        # it resets the threshold to its original value.
+        config.silero_vad.max_speech_duration = 5  # seconds
+        config.sample_rate = args.sample_rate
 
-    window_size = config.silero_vad.window_size
+        window_size = config.silero_vad.window_size
+        print("use silero-vad")
+    else:
+        config.ten_vad.model = args.ten_vad_model
+        config.ten_vad.threshold = 0.2
+        config.ten_vad.min_silence_duration = 0.25  # seconds
+        config.ten_vad.min_speech_duration = 0.25  # seconds
+
+        # If the current segment is larger than this value, then it increases
+        # the threshold to 0.9 internally. After detecting this segment,
+        # it resets the threshold to its original value.
+        config.ten_vad.max_speech_duration = 5  # seconds
+        config.sample_rate = args.sample_rate
+
+        window_size = config.ten_vad.window_size
+        print("use ten-vad")
 
     buffer = []
     vad = sherpa_onnx.VoiceActivityDetector(config, buffer_size_in_seconds=100)
@@ -577,6 +628,16 @@ def main():
                 vad.accept_waveform(buffer[:window_size])
                 buffer = buffer[window_size:]
 
+                if False:
+                    # If you want to process the speech segment as soon as
+                    # speech is detected, you can use
+                    current_segment = vad.current_segment
+                    if len(current_segment.samples) > 0:
+                        print(
+                            f"speech starts at {current_segment.start/16000} seconds: ",
+                            f"duration {len(current_segment.samples)/16000} seconds",
+                        )
+
         streams = []
         segments = []
         while not vad.empty():
@@ -598,6 +659,8 @@ def main():
 
         for seg, stream in zip(segments, streams):
             seg.text = stream.result.text
+            if seg.text in (".", "The."):
+                continue
             segment_list.append(seg)
 
     end_t = dt.datetime.now()

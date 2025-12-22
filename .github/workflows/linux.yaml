@@ -11,6 +11,7 @@ on:
       - '.github/scripts/test-kws.sh'
       - '.github/scripts/test-online-transducer.sh'
       - '.github/scripts/test-offline-speech-denoiser.sh'
+      - '.github/scripts/test-offline-source-separation.sh'
       - '.github/scripts/test-online-paraformer.sh'
       - '.github/scripts/test-offline-transducer.sh'
       - '.github/scripts/test-offline-ctc.sh'
@@ -33,6 +34,7 @@ on:
       - '.github/workflows/linux.yaml'
       - '.github/scripts/test-kws.sh'
       - '.github/scripts/test-offline-speech-denoiser.sh'
+      - '.github/scripts/test-offline-source-separation.sh'
       - '.github/scripts/test-online-transducer.sh'
       - '.github/scripts/test-online-paraformer.sh'
       - '.github/scripts/test-offline-transducer.sh'
@@ -72,6 +74,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Update version
+        shell: bash
+        run: |
+          ./new-release.sh
+          git diff .
+
       - name: Display PWD
         shell: bash
         run: |
@@ -102,12 +110,17 @@ jobs:
               popd
 
               export CPLUS_INCLUDE_PATH=$PWD/alsa-lib/include:$CPLUS_INCLUDE_PATH
+              export C_INCLUDE_PATH=$PWD/alsa-lib/include:$C_INCLUDE_PATH
               export SHERPA_ONNX_ALSA_LIB_DIR=$PWD/alsa-lib/src/.libs
+
+              p=$PWD
 
               mkdir build
               cd build
 
               cmake \
+                -DALSA_INCLUDE_DIR=$p/alsa-lib/include \
+                -DALSA_LIBRARY=$p/alsa-lib/src/.libs/libasound.so \
                 -D SHERPA_ONNX_ENABLE_TTS=${{ matrix.with_tts }} \
                 -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
                 -D BUILD_SHARED_LIBS=${{ matrix.shared_lib }} \
@@ -204,6 +217,20 @@ jobs:
           file_glob: true
           overwrite: true
           file: sherpa-onnx-*.tar.bz2
+
+      - name: Test offline source separation
+        shell: bash
+        run: |
+          du -h -d1 .
+          export PATH=$PWD/build/bin:$PATH
+          export EXE=sherpa-onnx-offline-source-separation
+
+          .github/scripts/test-offline-source-separation.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-separation-${{ matrix.build_type }}-with-shared-lib-${{ matrix.shared_lib }}-with-tts-${{ matrix.with_tts }}
+          path: ./source-separation-wavs/*.wav
 
       - name: Test offline CTC
         shell: bash

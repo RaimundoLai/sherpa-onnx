@@ -17,6 +17,7 @@
 #include "sherpa-onnx/python/csrc/offline-model-config.h"
 #include "sherpa-onnx/python/csrc/offline-punctuation.h"
 #include "sherpa-onnx/python/csrc/offline-recognizer.h"
+#include "sherpa-onnx/python/csrc/offline-source-separation.h"
 #include "sherpa-onnx/python/csrc/offline-speech-denoiser.h"
 #include "sherpa-onnx/python/csrc/offline-stream.h"
 #include "sherpa-onnx/python/csrc/online-ctc-fst-decoder-config.h"
@@ -30,6 +31,7 @@
 #include "sherpa-onnx/python/csrc/spoken-language-identification.h"
 #include "sherpa-onnx/python/csrc/vad-model-config.h"
 #include "sherpa-onnx/python/csrc/vad-model.h"
+#include "sherpa-onnx/python/csrc/version.h"
 #include "sherpa-onnx/python/csrc/voice-activity-detector.h"
 #include "sherpa-onnx/python/csrc/wave-writer.h"
 
@@ -78,11 +80,13 @@ PYBIND11_MODULE(_sherpa_onnx, m) {
 #if SHERPA_ONNX_ENABLE_TTS == 1
   PybindOfflineTts(&m);
 #else
-  /* Define "empty" TTS sybmbols */
+  /* Define "empty" TTS symbols */
+  m.attr("OfflineTtsKittenModelConfig") = py::none();
   m.attr("OfflineTtsKokoroModelConfig") = py::none();
   m.attr("OfflineTtsMatchaModelConfig") = py::none();
   m.attr("OfflineTtsModelConfig") = py::none();
   m.attr("OfflineTtsVitsModelConfig") = py::none();
+  m.attr("OfflineTtsZipvoiceModelConfig") = py::none();
   m.attr("GeneratedAudio") = py::none();
   m.attr("OfflineTtsConfig") = py::none();
   m.attr("OfflineTts") = py::none();
@@ -97,7 +101,7 @@ PYBIND11_MODULE(_sherpa_onnx, m) {
   PybindOfflineSpeakerDiarizationResult(&m);
   PybindOfflineSpeakerDiarization(&m);
 #else
-  /* Define "empty" diarization sybmbols */
+  /* Define "empty" diarization symbols */
   m.attr("FastClusteringConfig") = py::none();
   m.attr("FastClustering") = py::none();
   m.attr("OfflineSpeakerDiarizationSegment") = py::none();
@@ -110,6 +114,8 @@ PYBIND11_MODULE(_sherpa_onnx, m) {
 
   PybindAlsa(&m);
   PybindOfflineSpeechDenoiser(&m);
+  PybindOfflineSourceSeparation(&m);
+  PybindVersion(&m);
 }
 
 }  // namespace sherpa_onnx

@@ -84,11 +84,6 @@ sed -i.bak s/"modelDir = null"/"modelDir = \"$model_dir\""/ ./MainActivity.kt
   sed -i.bak s%"ruleFsts = null"%"ruleFars = \"$rule_fars\""% ./MainActivity.kt
 {% endif %}
 
-{% if tts_model.dict_dir %}
-  dict_dir={{ tts_model.dict_dir }}
-  sed -i.bak s%"dictDir = null"%"dictDir = \"$dict_dir\""% ./MainActivity.kt
-{% endif %}
-
 {% if tts_model.data_dir %}
   data_dir={{ tts_model.data_dir }}
   sed -i.bak s%"dataDir = null"%"dataDir = \"$data_dir\""% ./MainActivity.kt
@@ -101,6 +96,10 @@ sed -i.bak s/"modelDir = null"/"modelDir = \"$model_dir\""/ ./MainActivity.kt
   sed -i.bak s%"lexicon = null"%"lexicon = \"$lexicon\""% ./MainActivity.kt
 {% endif %}
 
+{% if tts_model.is_kitten %}
+  sed -i.bak s/"isKitten = false"/"isKitten = true"/ ./MainActivity.kt
+{% endif %}
+
 git diff
 popd
 
@@ -108,7 +107,7 @@ if [[ $model_dir == vits-melo-tts-zh_en ]]; then
   lang=zh_en
 fi
 
-if [[ $model_dir == kokoro-multi-lang-v1_0 ]]; then
+if [[ $model_dir == kokoro-multi-lang-v1_0 || $model_dir == kokoro-multi-lang-v1_1 || $model_dir == kokoro-int8-multi-lang-v1_1 ]]; then
   lang=zh_en
 fi
 

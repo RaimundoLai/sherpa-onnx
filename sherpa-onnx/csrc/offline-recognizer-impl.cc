@@ -24,6 +24,7 @@
 #include "onnxruntime_cxx_api.h"  // NOLINT
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
+#include "sherpa-onnx/csrc/offline-recognizer-canary-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-ctc-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-fire-red-asr-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-moonshine-impl.h"
@@ -34,10 +35,32 @@
 #include "sherpa-onnx/csrc/offline-recognizer-whisper-impl.h"
 #include "sherpa-onnx/csrc/text-utils.h"
 
+#if SHERPA_ONNX_ENABLE_RKNN
+#include "sherpa-onnx/csrc/rknn/offline-recognizer-sense-voice-rknn-impl.h"
+#endif
+
 namespace sherpa_onnx {
 
 std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
     const OfflineRecognizerConfig &config) {
+  if (config.model_config.provider == "rknn") {
+#if SHERPA_ONNX_ENABLE_RKNN
+    if (config.model_config.sense_voice.model.empty()) {
+      SHERPA_ONNX_LOGE(
+          "Only SenseVoice models are currently supported "
+          "by rknn for non-streaming ASR. Fallback to CPU");
+    } else if (!config.model_config.sense_voice.model.empty()) {
+      return std::make_unique<OfflineRecognizerSenseVoiceRknnImpl>(config);
+    }
+#else
+    SHERPA_ONNX_LOGE(
+        "Please rebuild sherpa-onnx with -DSHERPA_ONNX_ENABLE_RKNN=ON if you "
+        "want to use rknn.");
+    SHERPA_ONNX_EXIT(-1);
+    return nullptr;
+#endif
+  }
+
   if (!config.model_config.sense_voice.model.empty()) {
     return std::make_unique<OfflineRecognizerSenseVoiceImpl>(config);
   }
@@ -64,6 +87,10 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
 
   if (!config.model_config.moonshine.preprocessor.empty()) {
     return std::make_unique<OfflineRecognizerMoonshineImpl>(config);
+  }
+
+  if (!config.model_config.canary.encoder.empty()) {
+    return std::make_unique<OfflineRecognizerCanaryImpl>(config);
   }
 
   // TODO(fangjun): Refactor it. We only need to use model type for the
@@ -224,6 +251,24 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
 template <typename Manager>
 std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
     Manager *mgr, const OfflineRecognizerConfig &config) {
+  if (config.model_config.provider == "rknn") {
+#if SHERPA_ONNX_ENABLE_RKNN
+    if (config.model_config.sense_voice.model.empty()) {
+      SHERPA_ONNX_LOGE(
+          "Only SenseVoice models are currently supported "
+          "by rknn for non-streaming ASR. Fallback to CPU");
+    } else if (!config.model_config.sense_voice.model.empty()) {
+      return std::make_unique<OfflineRecognizerSenseVoiceRknnImpl>(mgr, config);
+    }
+#else
+    SHERPA_ONNX_LOGE(
+        "Please rebuild sherpa-onnx with -DSHERPA_ONNX_ENABLE_RKNN=ON if you "
+        "want to use rknn.");
+    SHERPA_ONNX_EXIT(-1);
+    return nullptr;
+#endif
+  }
+
   if (!config.model_config.sense_voice.model.empty()) {
     return std::make_unique<OfflineRecognizerSenseVoiceImpl>(mgr, config);
   }
@@ -250,6 +295,10 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
 
   if (!config.model_config.moonshine.preprocessor.empty()) {
     return std::make_unique<OfflineRecognizerMoonshineImpl>(mgr, config);
+  }
+
+  if (!config.model_config.canary.encoder.empty()) {
+    return std::make_unique<OfflineRecognizerCanaryImpl>(mgr, config);
   }
 
   // TODO(fangjun): Refactor it. We only need to use model type for the
@@ -451,8 +500,7 @@ OfflineRecognizerImpl::OfflineRecognizerImpl(
     }
   }
 
-  if (!config.hr.dict_dir.empty() && !config.hr.lexicon.empty() &&
-      !config.hr.rule_fsts.empty()) {
+  if (!config.hr.lexicon.empty() && !config.hr.rule_fsts.empty()) {
     auto hr_config = config.hr;
     hr_config.debug = config.model_config.debug;
     hr_ = std::make_unique<HomophoneReplacer>(hr_config);
@@ -505,8 +553,7 @@ OfflineRecognizerImpl::OfflineRecognizerImpl(
     }    // for (const auto &f : files)
   }      // if (!config.rule_fars.empty())
 
-  if (!config.hr.dict_dir.empty() && !config.hr.lexicon.empty() &&
-      !config.hr.rule_fsts.empty()) {
+  if (!config.hr.lexicon.empty() && !config.hr.rule_fsts.empty()) {
     auto hr_config = config.hr;
     hr_config.debug = config.model_config.debug;
     hr_ = std::make_unique<HomophoneReplacer>(mgr, hr_config);

@@ -58,6 +58,8 @@ id2speaker = {
     50: "zm_yunxi",
     51: "zm_yunxia",
     52: "zm_yunyang",
+    53: "zm_jiahao",
+    54: "zf_shufen",
 }
 
 speaker2id = {speaker: idx for idx, speaker in id2speaker.items()}
