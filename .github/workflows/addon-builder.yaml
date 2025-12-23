@@ -209,12 +209,12 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
               source $HOME/.cargo/env
 
-              # Download ONNX Runtime 1.22.0 static lib (glibc2_17 compatible for manylinux2014)
-              curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
-              unzip onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
+              # Download ONNX Runtime 1.22.0 shared lib (glibc2_17 compatible, has libonnxruntime.so)
+              curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-glibc2_17-Release-1.22.0.zip
+              unzip onnxruntime-linux-x64-glibc2_17-Release-1.22.0.zip
 
-              export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17/lib
-              export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17/include
+              export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-linux-x64-glibc2_17-Release-1.22.0/lib
+              export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-linux-x64-glibc2_17-Release-1.22.0/include
 
               ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
 
