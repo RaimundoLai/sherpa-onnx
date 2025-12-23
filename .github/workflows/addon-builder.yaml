@@ -205,13 +205,13 @@ jobs:
             cmake --version
             cd /shared
             
-            # Download ONNX Runtime 1.22.0 from Microsoft (requires manylinux_2_28 for GLIBC compatibility)
-            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
-            tar xzf onnxruntime-linux-x64-1.22.0.tgz
-            rm onnxruntime-linux-x64-1.22.0.tgz
+            # Download patched ONNX Runtime 1.22.0 from csukuangfj (same as official linux-gpu.yaml)
+            curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+            unzip onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+            rm onnxruntime-linux-x64-gpu-1.22.0-patched.zip
             
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-1.22.0/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-1.22.0/include
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/include
             
             ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
             
@@ -224,7 +224,8 @@ jobs:
               -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
               -DSHERPA_ONNX_ENABLE_BINARY=OFF \
               ..
-            make -j install
+            make -j VERBOSE=1 || { echo "=== BUILD FAILED ==="; exit 1; }
+            make install
             
             echo "--- Install lib directory ---"
             ls -lh ./install/lib/
@@ -316,7 +317,8 @@ jobs:
               -DSHERPA_ONNX_ENABLE_BINARY=OFF \
               -DSHERPA_ONNX_ENABLE_GPU=ON \
               ..
-            make -j install
+            make -j VERBOSE=1 || { echo "=== BUILD FAILED ==="; exit 1; }
+            make install
             
             # Copy ONNX Runtime GPU libs to install directory
             cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib/*.so* ./install/lib/
@@ -373,11 +375,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15-intel
             arch: x64
             onnxruntime_arch: x86_64
             output_name: sherpa-onnx-macos-x64
-          - os: macos-latest
+          - os: macos-14
             arch: arm64
             onnxruntime_arch: arm64
             output_name: sherpa-onnx-macos-arm64
