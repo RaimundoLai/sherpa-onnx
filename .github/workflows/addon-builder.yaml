@@ -325,6 +325,9 @@ jobs:
               make -j2
               make install
 
+              echo "---------- Copying ONNX Runtime GPU libs ----------"
+              cp -v ../onnxruntime-linux-x64-gpu-1.22.0-patched/lib/*.so* ./install/lib/
+
               ls -lh install/lib
 
       - name: Build sherpa-onnx node-addon
