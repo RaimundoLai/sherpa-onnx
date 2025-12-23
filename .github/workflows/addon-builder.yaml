@@ -192,19 +192,20 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build in Docker (Manylinux)
+      - name: Build sherpa-onnx in Docker (Manylinux2014)
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux_2_28_x86_64
+          image: quay.io/pypa/manylinux2014_x86_64
           options: |
             --volume ${{ github.workspace }}/:/shared/
           shell: bash
           run: |
-            # 1. Setup Environment
-            export PATH=/opt/python/cp38-cp38/bin:$PATH
+            uname -a
+            gcc --version
+            cmake --version
             cd /shared
             
-            # 2. Download ONNX Runtime 1.22.0 (Microsoft official for Linux CPU)
+            # Download ONNX Runtime 1.22.0 (CPU)
             curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
             tar xzf onnxruntime-linux-x64-1.22.0.tgz
             rm onnxruntime-linux-x64-1.22.0.tgz
@@ -212,40 +213,39 @@ jobs:
             export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-1.22.0/lib
             export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-1.22.0/include
             
-            ls -lh /shared/onnxruntime-linux-x64-1.22.0/lib
+            ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
             
-            # 3. Build sherpa-onnx shared libs
             mkdir build
             cd build
             cmake \
-              -Wno-dev \
               -DCMAKE_INSTALL_PREFIX=./install \
-              -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_SHARED_LIBS=ON \
               -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
               -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
               -DSHERPA_ONNX_ENABLE_BINARY=OFF \
               ..
-            make -j2 install
+            make -j install
             
-            # 4. Build Node Addon
-            cd /shared
-            export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-1.22.0/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-1.22.0/include
-            
-            echo "--- Checking install directory structure ---"
-            ls -lhR /shared/build/install/include/
-            echo "--- End of install directory structure ---"
-            
-            cd scripts/node-addon-api
-            
-            # Install Node/NPM in container
-            curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-            yum install -y nodejs
-            
-            npm i
-            ./node_modules/.bin/cmake-js compile --log-level verbose
+            echo "--- Install lib directory ---"
+            ls -lh ./install/lib/
+            echo "--- Install include directory ---"
+            ls -lh ./install/include/ || echo "No include dir"
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+          
+          # Create symlink like official workflow
+          sudo mkdir -p /shared
+          sudo ln -s $PWD/build /shared/
+          
+          ls -lh /shared/build/install/lib/
+          
+          cd scripts/node-addon-api/
+          npm i
+          ./node_modules/.bin/cmake-js compile --log-level verbose
 
       - name: Package artifacts
         shell: bash
@@ -285,10 +285,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build in Docker (Manylinux)
+      - name: Build sherpa-onnx in Docker (Manylinux2014 with GPU)
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux_2_28_x86_64
+          image: quay.io/pypa/manylinux2014_x86_64
           options: |
             --volume ${{ github.workspace }}/:/shared/
           shell: bash
@@ -305,44 +305,41 @@ jobs:
             export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/lib
             export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/include
             
-            ls -lh /shared/onnxruntime-linux-x64-gpu-1.22.0/lib
+            ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
             
-            # 3. Build sherpa-onnx shared libs with GPU support
             mkdir build
             cd build
             cmake \
-              -Wno-dev \
               -DCMAKE_INSTALL_PREFIX=./install \
-              -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_SHARED_LIBS=ON \
               -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
               -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
               -DSHERPA_ONNX_ENABLE_BINARY=OFF \
               -DSHERPA_ONNX_ENABLE_GPU=ON \
               ..
-            make -j2 install
+            make -j install
             
             # Copy ONNX Runtime GPU libs to install directory
             cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0/lib/*.so* ./install/lib/
             
-            # 4. Build Node Addon
-            cd /shared
-            export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/include
-            
-            echo "--- Checking install directory structure ---"
-            ls -lhR /shared/build/install/include/
-            echo "--- End of install directory structure ---"
-            
-            cd scripts/node-addon-api
-            
-            # Install Node/NPM in container
-            curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-            yum install -y nodejs
-            
-            npm i
-            ./node_modules/.bin/cmake-js compile --log-level verbose
+            echo "--- Install lib directory ---"
+            ls -lh ./install/lib/
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+          
+          # Create symlink like official workflow
+          sudo mkdir -p /shared
+          sudo ln -s $PWD/build /shared/
+          
+          ls -lh /shared/build/install/lib/
+          
+          cd scripts/node-addon-api/
+          npm i
+          ./node_modules/.bin/cmake-js compile --log-level verbose
 
       - name: Package artifacts
         shell: bash
