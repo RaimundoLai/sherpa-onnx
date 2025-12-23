@@ -205,6 +205,10 @@ jobs:
               cmake --version
               cd /shared
 
+              # Install Rust for tokenizers_cpp
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source $HOME/.cargo/env
+
               # Download ONNX Runtime 1.22.0 static lib (glibc2_17 compatible for manylinux2014)
               curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
               unzip onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
@@ -292,6 +296,10 @@ jobs:
               gcc --version
               cmake --version
               cd /home/runner/work/sherpa-onnx/sherpa-onnx
+
+              # Install Rust for tokenizers_cpp
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source $HOME/.cargo/env
 
               # Download patched ONNX Runtime GPU
               curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
