@@ -44,6 +44,7 @@ jobs:
           mkdir build
           cd build
           cmake \
+            -Wno-dev \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=./install \
             -DBUILD_SHARED_LIBS=ON \
@@ -133,6 +134,7 @@ jobs:
           mkdir build
           cd build
           cmake \
+            -Wno-dev \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=./install \
             -DBUILD_SHARED_LIBS=ON \
@@ -216,6 +218,7 @@ jobs:
             mkdir build
             cd build
             cmake \
+              -Wno-dev \
               -DCMAKE_INSTALL_PREFIX=./install \
               -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_SHARED_LIBS=ON \
@@ -228,6 +231,13 @@ jobs:
             # 4. Build Node Addon
             cd /shared
             export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-1.22.0/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-1.22.0/include
+            
+            echo "--- Checking install directory structure ---"
+            ls -lhR /shared/build/install/include/
+            echo "--- End of install directory structure ---"
+            
             cd scripts/node-addon-api
             
             # Install Node/NPM in container
@@ -301,6 +311,7 @@ jobs:
             mkdir build
             cd build
             cmake \
+              -Wno-dev \
               -DCMAKE_INSTALL_PREFIX=./install \
               -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_SHARED_LIBS=ON \
@@ -317,6 +328,13 @@ jobs:
             # 4. Build Node Addon
             cd /shared
             export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/include
+            
+            echo "--- Checking install directory structure ---"
+            ls -lhR /shared/build/install/include/
+            echo "--- End of install directory structure ---"
+            
             cd scripts/node-addon-api
             
             # Install Node/NPM in container
@@ -361,9 +379,11 @@ jobs:
         include:
           - os: macos-latest
             arch: x64
+            onnxruntime_arch: x86_64
             output_name: sherpa-onnx-macos-x64
           - os: macos-latest
             arch: arm64
+            onnxruntime_arch: arm64
             output_name: sherpa-onnx-macos-arm64
 
     steps:
@@ -376,46 +396,47 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: |
-          brew install cmake
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.arch }}
 
       - name: Download ONNX Runtime 1.22.0
         shell: bash
         run: |
-          if [[ "${{ matrix.arch }}" == "arm64" ]]; then
-            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz
-            tar xzf onnxruntime-osx-arm64-1.22.0.tgz
-            rm onnxruntime-osx-arm64-1.22.0.tgz
-            mv onnxruntime-osx-arm64-1.22.0 onnxruntime
-          else
-            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-x86_64-1.22.0.tgz
-            tar xzf onnxruntime-osx-x86_64-1.22.0.tgz
-            rm onnxruntime-osx-x86_64-1.22.0.tgz
-            mv onnxruntime-osx-x86_64-1.22.0 onnxruntime
-          fi
+          curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-${{ matrix.onnxruntime_arch }}-1.22.0.tgz
+          tar xzf onnxruntime-osx-${{ matrix.onnxruntime_arch }}-1.22.0.tgz
+          rm onnxruntime-osx-${{ matrix.onnxruntime_arch }}-1.22.0.tgz
+          mv onnxruntime-osx-${{ matrix.onnxruntime_arch }}-1.22.0 onnxruntime
           ls -lh onnxruntime/lib
 
       - name: Build sherpa-onnx
         shell: bash
         run: |
+          export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          
           export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime/lib
           export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime/include
           
           mkdir build
           cd build
           cmake \
+            -Wno-dev \
             -DCMAKE_INSTALL_PREFIX=./install \
             -DBUILD_SHARED_LIBS=ON \
             -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
             -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
             -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            -DCMAKE_OSX_ARCHITECTURES='${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}' \
             ..
           make -j4 install
 
       - name: Build sherpa-onnx node-addon
         shell: bash
         run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          
           export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime/lib
           export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime/include
           
