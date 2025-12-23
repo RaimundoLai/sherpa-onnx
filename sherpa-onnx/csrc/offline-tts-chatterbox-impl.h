@@ -560,7 +560,7 @@ GeneratedAudio Generate(
     }
 
     Ort::Value audio = model_->Run(
-        std::move(x_tensor),
+        x_tensor,
         prompt_samples.data(),
         prompt_samples.size(),
         speed, 
