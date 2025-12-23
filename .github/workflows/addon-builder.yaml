@@ -178,7 +178,7 @@ jobs:
           path: artifacts/sherpa-onnx-node.tar.gz
 
   # =================================================================================================
-  # Linux Build (Manylinux2014)
+  # Linux Build (Following npm-addon-linux-x64.yaml)
   # =================================================================================================
   npm-addon-linux-x64:
     runs-on: ubuntu-latest
@@ -190,60 +190,56 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Build sherpa-onnx in Docker (Manylinux_2_28)
+      - name: Build sherpa-onnx
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux_2_28_x86_64
-          options: |
-            --volume ${{ github.workspace }}/:/shared/
-          shell: bash
-          run: |
-            uname -a
-            gcc --version
-            cmake --version
-            cd /shared
-            
-            # Download patched ONNX Runtime 1.22.0 from csukuangfj (same as official linux-gpu.yaml)
-            curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            unzip onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            rm onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/include
-            
-            ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
-            
-            mkdir build
-            cd build
-            cmake \
-              -DCMAKE_INSTALL_PREFIX=./install \
-              -DBUILD_SHARED_LIBS=ON \
-              -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
-              -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
-              -DSHERPA_ONNX_ENABLE_BINARY=OFF \
-              ..
-            make -j VERBOSE=1 || { echo "=== BUILD FAILED ==="; exit 1; }
-            make install
-            
-            echo "--- Install lib directory ---"
-            ls -lh ./install/lib/
+            image: quay.io/pypa/manylinux2014_x86_64
+            options: |
+              --volume ${{ github.workspace }}/:/shared/
+            shell: bash
+            run: |
+              uname -a
+              gcc --version
+              cmake --version
+              cd /shared
+
+              # Download ONNX Runtime 1.22.0 static lib (glibc2_17 compatible for manylinux2014)
+              curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
+              unzip onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17.zip
+
+              export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17/lib
+              export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-linux-x64-static_lib-1.22.0-glibc2_17/include
+
+              ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
+
+              mkdir build
+              cd build
+              cmake \
+                -DCMAKE_INSTALL_PREFIX=./install \
+                -DBUILD_SHARED_LIBS=ON \
+                -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+                -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+                -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+                ..
+              make -j install
 
       - name: Build sherpa-onnx node-addon
         shell: bash
         run: |
           d=$PWD
           export SHERPA_ONNX_INSTALL_DIR=$d/build/install
-          
-          # Create symlink like official workflow
-          sudo mkdir -p /shared
+
+          sudo mkdir /shared
           sudo ln -s $PWD/build /shared/
-          
-          ls -lh /shared/build/install/lib/
-          
+
+          ls -lh /shared/build
+
           cd scripts/node-addon-api/
+
           npm i
+
           ./node_modules/.bin/cmake-js compile --log-level verbose
 
       - name: Package artifacts
@@ -270,7 +266,7 @@ jobs:
           path: artifacts/sherpa-onnx-linux-x64.tar.gz
 
   # =================================================================================================
-  # Linux CUDA Build
+  # Linux CUDA Build (Following linux-gpu.yaml)
   # =================================================================================================
   npm-addon-linux-x64-cuda:
     runs-on: ubuntu-latest
@@ -282,64 +278,62 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Build sherpa-onnx in Docker (Manylinux_2_28 with GPU)
+      - name: Build sherpa-onnx
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux_2_28_x86_64
-          options: |
-            --volume ${{ github.workspace }}/:/shared/
-          shell: bash
-          run: |
-            uname -a
-            gcc --version
-            cmake --version
-            cd /shared
-            
-            # Download patched ONNX Runtime 1.22.0 GPU from csukuangfj (compatible with manylinux_2_28)
-            curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            unzip onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            rm onnxruntime-linux-x64-gpu-1.22.0-patched.zip
-            
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/include
-            
-            ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
-            
-            mkdir build
-            cd build
-            cmake \
-              -DCMAKE_INSTALL_PREFIX=./install \
-              -DBUILD_SHARED_LIBS=ON \
-              -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
-              -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
-              -DSHERPA_ONNX_ENABLE_BINARY=OFF \
-              -DSHERPA_ONNX_ENABLE_GPU=ON \
-              ..
-            make -j VERBOSE=1 || { echo "=== BUILD FAILED ==="; exit 1; }
-            make install
-            
-            # Copy ONNX Runtime GPU libs to install directory
-            cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib/*.so* ./install/lib/
-            
-            echo "--- Install lib directory ---"
-            ls -lh ./install/lib/
+            image: quay.io/pypa/manylinux_2_28_x86_64
+            options: |
+              --volume ${{ github.workspace }}/:/home/runner/work/sherpa-onnx/sherpa-onnx
+            shell: bash
+            run: |
+              uname -a
+              gcc --version
+              cmake --version
+              cd /home/runner/work/sherpa-onnx/sherpa-onnx
+
+              # Download patched ONNX Runtime GPU
+              curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+              unzip onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+
+              export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-linux-x64-gpu-1.22.0-patched/lib
+              export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-linux-x64-gpu-1.22.0-patched/include
+
+              ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/libonnxruntime.so
+
+              mkdir build
+              cd build
+
+              cmake \
+                -DCMAKE_INSTALL_PREFIX=./install \
+                -DBUILD_SHARED_LIBS=ON \
+                -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+                -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+                -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+                -DSHERPA_ONNX_ENABLE_GPU=ON \
+                ..
+
+              make -j2
+              make install
+
+              ls -lh install/lib
 
       - name: Build sherpa-onnx node-addon
         shell: bash
         run: |
           d=$PWD
           export SHERPA_ONNX_INSTALL_DIR=$d/build/install
-          
-          # Create symlink like official workflow
-          sudo mkdir -p /shared
+
+          sudo mkdir /shared
           sudo ln -s $PWD/build /shared/
-          
-          ls -lh /shared/build/install/lib/
-          
+
+          ls -lh /shared/build
+
           cd scripts/node-addon-api/
+
           npm i
+
           ./node_modules/.bin/cmake-js compile --log-level verbose
 
       - name: Package artifacts
