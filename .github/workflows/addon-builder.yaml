@@ -7,14 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  # =================================================================================================
+  # Windows CUDA Build (Updated for ONNX Runtime 1.22.1)
+  # =================================================================================================
   npm-addon-win-x64-cuda:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2022]
-        python-version: ["3.8"]
-
+    runs-on: windows-2022
     steps:
       - name: Clone sherpa-onnx repository
         uses: actions/checkout@v4
@@ -22,23 +19,28 @@ jobs:
           repository: RaimundoLai/sherpa-onnx
           branch: dev
 
-      - name: Setup Python ${{ matrix.python-version }}
+      - name: Setup Python 3.8
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.8"
 
       - uses: actions/setup-node@v4
         with:
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Display node version
+      - name: Download ONNX Runtime 1.22.1 GPU
         shell: bash
         run: |
-          node --version
+          curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/onnxruntime-win-x64-gpu-1.22.1.zip
+          unzip -q onnxruntime-win-x64-gpu-1.22.1.zip
+          rm onnxruntime-win-x64-gpu-1.22.1.zip
 
-      - name: Build sherpa-onnx
+      - name: Build sherpa-onnx (CUDA)
         shell: bash
         run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-gpu-1.22.1/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-gpu-1.22.1/include
+          
           mkdir build
           cd build
           cmake \
@@ -51,48 +53,41 @@ jobs:
             -DSHERPA_ONNX_ENABLE_GPU=ON \
             ..
 
-          ls -lh  _deps/onnxruntime-src/lib/
-
           cmake --build . --config Release --target install -- -m:6
-
-          ls -lh install/lib
-
+          
           echo "----------"
-
-          cp -v  _deps/onnxruntime-src/lib/*.lib ./install/lib
-          cp -v  _deps/onnxruntime-src/lib/*.dll ./install/lib
-
-          echo "----------"
-
           ls -lh install/lib
+          echo "---------- Copying ONNX Runtime DLLs ----------"
+          cp -v ../onnxruntime-win-x64-gpu-1.22.1/lib/*.lib ./install/lib/
+          cp -v ../onnxruntime-win-x64-gpu-1.22.1/lib/*.dll ./install/lib/
 
       - name: Build sherpa-onnx node-addon
         shell: bash
         run: |
+          # Set env vars again for cmake-js to pick up
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-gpu-1.22.1/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-gpu-1.22.1/include
+          
           d=$PWD
           export SHERPA_ONNX_INSTALL_DIR=$d/build/install
 
           cd scripts/node-addon-api/
-
           npm i
-
           ./node_modules/.bin/cmake-js compile --log-level verbose
 
-      - name: Prepare for publish
+      - name: Package artifacts
         shell: bash
         run: |
-          owner=${{ github.repository_owner }}
-          export owner
-
-          echo "---"
-          ls -lh build/install/lib/
-          echo "---"
-          ls -lh build/install/lib/
-          echo "---"
           mkdir -p bin
           mkdir -p artifacts
+          
+          # Copy .node file
           cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
-          cp -fv build/install/lib/*dll bin/
+          
+          # Copy dependencies (DLLs)
+          cp -fv build/install/lib/*.dll bin/
+          
+          # Tarball
           cd bin && tar -czvf ../artifacts/sherpa-onnx-node-cuda.tar.gz ./* && cd ..
           
       - name: Upload artifacts
@@ -100,14 +95,12 @@ jobs:
         with:
           name: sherpa-onnx-node-cuda.tar.gz
           path: artifacts/sherpa-onnx-node-cuda.tar.gz
-  npm-addon-win-x64:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2022]
-        python-version: ["3.8"]
 
+  # =================================================================================================
+  # Windows CPU Build
+  # =================================================================================================
+  npm-addon-win-x64:
+    runs-on: windows-2022
     steps:
       - name: Clone sherpa-onnx repository
         uses: actions/checkout@v4
@@ -115,23 +108,28 @@ jobs:
           repository: RaimundoLai/sherpa-onnx
           branch: dev
 
-      - name: Setup Python ${{ matrix.python-version }}
+      - name: Setup Python 3.8
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.8"
 
       - uses: actions/setup-node@v4
         with:
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Display node version
+      - name: Download ONNX Runtime 1.22.1
         shell: bash
         run: |
-          node --version
+          curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/onnxruntime-win-x64-1.22.1.zip
+          unzip -q onnxruntime-win-x64-1.22.1.zip
+          rm onnxruntime-win-x64-1.22.1.zip
 
       - name: Build sherpa-onnx
         shell: bash
         run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-1.22.1/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-1.22.1/include
+          
           mkdir build
           cd build
           cmake \
@@ -144,48 +142,31 @@ jobs:
             -DSHERPA_ONNX_ENABLE_GPU=OFF \
             ..
 
-          ls -lh  _deps/onnxruntime-src/lib/
-
           cmake --build . --config Release --target install -- -m:6
-
-          ls -lh install/lib
-
-          echo "----------"
-
-          cp -v  _deps/onnxruntime-src/lib/*.lib ./install/lib
-          cp -v  _deps/onnxruntime-src/lib/*.dll ./install/lib
-
-          echo "----------"
-
-          ls -lh install/lib
+          
+          echo "---------- Copying ONNX Runtime DLLs ----------"
+          cp -v ../onnxruntime-win-x64-1.22.1/lib/*.lib ./install/lib/
+          cp -v ../onnxruntime-win-x64-1.22.1/lib/*.dll ./install/lib/
 
       - name: Build sherpa-onnx node-addon
         shell: bash
         run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-1.22.1/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-1.22.1/include
+          
           d=$PWD
           export SHERPA_ONNX_INSTALL_DIR=$d/build/install
-
           cd scripts/node-addon-api/
-
           npm i
-
           ./node_modules/.bin/cmake-js compile --log-level verbose
 
-      - name: Prepare for publish
+      - name: Package artifacts
         shell: bash
         run: |
-          owner=${{ github.repository_owner }}
-          export owner
-
-          echo "---"
-          ls -lh build/install/lib/
-          echo "---"
-          ls -lh build/install/lib/
-          echo "---"
           mkdir -p bin
           mkdir -p artifacts
           cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
-          cp -fv build/install/lib/*dll bin/
+          cp -fv build/install/lib/*.dll bin/
           cd bin && tar -czvf ../artifacts/sherpa-onnx-node.tar.gz ./* && cd ..
           
       - name: Upload artifacts
@@ -193,9 +174,282 @@ jobs:
         with:
           name: sherpa-onnx-win-x64.tar.gz
           path: artifacts/sherpa-onnx-node.tar.gz
+
+  # =================================================================================================
+  # Linux Build (Manylinux2014)
+  # =================================================================================================
+  npm-addon-linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          branch: dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build in Docker (Manylinux)
+        uses: addnab/docker-run-action@v3
+        with:
+          image: quay.io/pypa/manylinux_2_28_x86_64
+          options: |
+            --volume ${{ github.workspace }}/:/shared/
+          shell: bash
+          run: |
+            # 1. Setup Environment
+            export PATH=/opt/python/cp38-cp38/bin:$PATH
+            cd /shared
+            
+            # 2. Download ONNX Runtime 1.22.0 (Microsoft official for Linux CPU)
+            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
+            tar xzf onnxruntime-linux-x64-1.22.0.tgz
+            rm onnxruntime-linux-x64-1.22.0.tgz
+            
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-1.22.0/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-1.22.0/include
+            
+            ls -lh /shared/onnxruntime-linux-x64-1.22.0/lib
+            
+            # 3. Build sherpa-onnx shared libs
+            mkdir build
+            cd build
+            cmake \
+              -DCMAKE_INSTALL_PREFIX=./install \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=ON \
+              -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+              -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+              -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+              ..
+            make -j2 install
+            
+            # 4. Build Node Addon
+            cd /shared
+            export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
+            cd scripts/node-addon-api
+            
+            # Install Node/NPM in container
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+            yum install -y nodejs
+            
+            npm i
+            ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p bin
+          mkdir -p artifacts
           
+          # Fix permissions from Docker
+          sudo chown -R $USER:$USER .
+          
+          # Copy compiled node addon
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          
+          # Copy shared libraries (.so)
+          cp -fv build/install/lib/lib*.so* bin/
+          
+          # Tarball
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-linux-x64.tar.gz ./* && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-linux-x64.tar.gz
+          path: artifacts/sherpa-onnx-linux-x64.tar.gz
+
+  # =================================================================================================
+  # Linux CUDA Build
+  # =================================================================================================
+  npm-addon-linux-x64-cuda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          branch: dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build in Docker (Manylinux)
+        uses: addnab/docker-run-action@v3
+        with:
+          image: quay.io/pypa/manylinux_2_28_x86_64
+          options: |
+            --volume ${{ github.workspace }}/:/shared/
+          shell: bash
+          run: |
+            # 1. Setup Environment
+            export PATH=/opt/python/cp38-cp38/bin:$PATH
+            cd /shared
+            
+            # 2. Download ONNX Runtime 1.22.0 GPU (Microsoft official)
+            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0.tgz
+            tar xzf onnxruntime-linux-x64-gpu-1.22.0.tgz
+            rm onnxruntime-linux-x64-gpu-1.22.0.tgz
+            
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/include
+            
+            ls -lh /shared/onnxruntime-linux-x64-gpu-1.22.0/lib
+            
+            # 3. Build sherpa-onnx shared libs with GPU support
+            mkdir build
+            cd build
+            cmake \
+              -DCMAKE_INSTALL_PREFIX=./install \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=ON \
+              -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+              -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+              -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+              -DSHERPA_ONNX_ENABLE_GPU=ON \
+              ..
+            make -j2 install
+            
+            # Copy ONNX Runtime GPU libs to install directory
+            cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0/lib/*.so* ./install/lib/
+            
+            # 4. Build Node Addon
+            cd /shared
+            export SHERPA_ONNX_INSTALL_DIR=/shared/build/install
+            cd scripts/node-addon-api
+            
+            # Install Node/NPM in container
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+            yum install -y nodejs
+            
+            npm i
+            ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p bin
+          mkdir -p artifacts
+          
+          # Fix permissions from Docker
+          sudo chown -R $USER:$USER .
+          
+          # Copy compiled node addon
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          
+          # Copy shared libraries (.so) including ONNX Runtime GPU libs
+          cp -fv build/install/lib/lib*.so* bin/
+          
+          # Tarball
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-linux-x64-cuda.tar.gz ./* && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-linux-x64-cuda.tar.gz
+          path: artifacts/sherpa-onnx-linux-x64-cuda.tar.gz
+
+  # =================================================================================================
+  # macOS Build (Intel & ARM64)
+  # =================================================================================================
+  npm-addon-macos:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: x64
+            output_name: sherpa-onnx-macos-x64
+          - os: macos-latest
+            arch: arm64
+            output_name: sherpa-onnx-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          branch: dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          brew install cmake
+
+      - name: Download ONNX Runtime 1.22.0
+        shell: bash
+        run: |
+          if [[ "${{ matrix.arch }}" == "arm64" ]]; then
+            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz
+            tar xzf onnxruntime-osx-arm64-1.22.0.tgz
+            rm onnxruntime-osx-arm64-1.22.0.tgz
+            mv onnxruntime-osx-arm64-1.22.0 onnxruntime
+          else
+            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-x86_64-1.22.0.tgz
+            tar xzf onnxruntime-osx-x86_64-1.22.0.tgz
+            rm onnxruntime-osx-x86_64-1.22.0.tgz
+            mv onnxruntime-osx-x86_64-1.22.0 onnxruntime
+          fi
+          ls -lh onnxruntime/lib
+
+      - name: Build sherpa-onnx
+        shell: bash
+        run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime/include
+          
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_INSTALL_PREFIX=./install \
+            -DBUILD_SHARED_LIBS=ON \
+            -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+            -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+            -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            ..
+          make -j4 install
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime/include
+          
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+          cd scripts/node-addon-api/
+          npm i
+          ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p bin
+          mkdir -p artifacts
+          
+          # Copy node addon
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          
+          # Copy dylibs
+          cp -fv build/install/lib/lib*.dylib bin/
+          
+          # Tarball
+          cd bin && tar -czvf ../artifacts/${{ matrix.output_name }}.tar.gz ./* && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output_name }}.tar.gz
+          path: artifacts/${{ matrix.output_name }}.tar.gz
+
+  # =================================================================================================
+  # Release
+  # =================================================================================================
   create-update-release:
-    needs: [npm-addon-win-x64, npm-addon-win-x64-cuda]
+    needs: [npm-addon-win-x64, npm-addon-win-x64-cuda, npm-addon-linux-x64, npm-addon-linux-x64-cuda, npm-addon-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -218,8 +472,18 @@ jobs:
           name: npm-addon builds ${{ steps.date.outputs.date }}
           body: |
              npm-addon builds (Build date: ${{ steps.date.outputs.date }})
-             - Windows (with CUDA support)
-             - Windows (without CUDA support)
+             
+             **Windows**
+             - Windows (x64)
+             - Windows (x64 with CUDA 12.x / ORT 1.22.1)
+             
+             **Linux**
+             - Linux (x64, Manylinux2_28)
+             - Linux (x64 with CUDA 12.x / ORT 1.22.0)
+             
+             **macOS**
+             - macOS (Intel x64)
+             - macOS (ARM64 Apple Silicon)
           files: |
             artifacts/**/*.tar.gz
           draft: false
@@ -236,8 +500,18 @@ jobs:
           body: |
             Latest npm-addon builds.
             Last updated: ${{ steps.date.outputs.date }}
-            - Windows (with CUDA support)
-            - Windows (without CUDA support)
+            
+            **Windows**
+            - Windows (x64)
+            - Windows (x64 with CUDA 12.x / ORT 1.22.1)
+            
+            **Linux**
+            - Linux (x64, Manylinux2_28)
+            - Linux (x64 with CUDA 12.x / ORT 1.22.0)
+            
+            **macOS**
+            - macOS (Intel x64)
+            - macOS (ARM64 Apple Silicon)
           files: |
             artifacts/**/*.tar.gz
           draft: false
