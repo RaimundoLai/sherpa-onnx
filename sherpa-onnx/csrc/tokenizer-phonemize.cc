@@ -171,7 +171,7 @@ private:
                                                  session_output_names_char_.data(), session_output_names_char_.size());
 
                 const float* logits = output_tensors[0].GetTensorData<float>();
-                auto& logits_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
+                auto logits_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
                 int64_t vocab_size = logits_shape[2];
                 const float* last_token_logits = logits + (logits_shape[1] - 1) * vocab_size;
 
