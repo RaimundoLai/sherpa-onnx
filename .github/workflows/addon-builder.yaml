@@ -192,10 +192,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build sherpa-onnx in Docker (Manylinux2014)
+      - name: Build sherpa-onnx in Docker (Manylinux_2_28)
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux2014_x86_64
+          image: quay.io/pypa/manylinux_2_28_x86_64
           options: |
             --volume ${{ github.workspace }}/:/shared/
           shell: bash
@@ -205,7 +205,7 @@ jobs:
             cmake --version
             cd /shared
             
-            # Download ONNX Runtime 1.22.0 (CPU)
+            # Download ONNX Runtime 1.22.0 from Microsoft (requires manylinux_2_28 for GLIBC compatibility)
             curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
             tar xzf onnxruntime-linux-x64-1.22.0.tgz
             rm onnxruntime-linux-x64-1.22.0.tgz
@@ -228,8 +228,6 @@ jobs:
             
             echo "--- Install lib directory ---"
             ls -lh ./install/lib/
-            echo "--- Install include directory ---"
-            ls -lh ./install/include/ || echo "No include dir"
 
       - name: Build sherpa-onnx node-addon
         shell: bash
@@ -285,25 +283,26 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build sherpa-onnx in Docker (Manylinux2014 with GPU)
+      - name: Build sherpa-onnx in Docker (Manylinux_2_28 with GPU)
         uses: addnab/docker-run-action@v3
         with:
-          image: quay.io/pypa/manylinux2014_x86_64
+          image: quay.io/pypa/manylinux_2_28_x86_64
           options: |
             --volume ${{ github.workspace }}/:/shared/
           shell: bash
           run: |
-            # 1. Setup Environment
-            export PATH=/opt/python/cp38-cp38/bin:$PATH
+            uname -a
+            gcc --version
+            cmake --version
             cd /shared
             
-            # 2. Download ONNX Runtime 1.22.0 GPU (Microsoft official)
-            curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0.tgz
-            tar xzf onnxruntime-linux-x64-gpu-1.22.0.tgz
-            rm onnxruntime-linux-x64-gpu-1.22.0.tgz
+            # Download patched ONNX Runtime 1.22.0 GPU from csukuangfj (compatible with manylinux_2_28)
+            curl -SL -O https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+            unzip onnxruntime-linux-x64-gpu-1.22.0-patched.zip
+            rm onnxruntime-linux-x64-gpu-1.22.0-patched.zip
             
-            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/lib
-            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0/include
+            export SHERPA_ONNXRUNTIME_LIB_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib
+            export SHERPA_ONNXRUNTIME_INCLUDE_DIR=/shared/onnxruntime-linux-x64-gpu-1.22.0-patched/include
             
             ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/
             
@@ -320,7 +319,7 @@ jobs:
             make -j install
             
             # Copy ONNX Runtime GPU libs to install directory
-            cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0/lib/*.so* ./install/lib/
+            cp -v /shared/onnxruntime-linux-x64-gpu-1.22.0-patched/lib/*.so* ./install/lib/
             
             echo "--- Install lib directory ---"
             ls -lh ./install/lib/
