@@ -236,8 +236,9 @@ class KokoroMultiLangLexicon::Impl {
     }
 
     std::vector<std::pair<std::string, std::string>> replace_str_pairs = {
-        {"，", ","}, {":", ","},  {"、", ","}, {"；", ";"},   {"：", ":"},
-        {"。", "."}, {"？", "?"}, {"！", "!"}, {"\\s+", " "},
+        {"，", ","}, {":", ","},  {"、", ","}, {"；", ";"},   {"：", ","},
+        {"。", "."}, {"？", "?"}, {"！", "!"}, {"“", "\""}, {"”", "\""},
+        {"—", ","},  {"…", "."},  {"\\s+", " "},
     };
     for (const auto &p : replace_str_pairs) {
       std::regex re(p.first);
@@ -582,6 +583,13 @@ class KokoroMultiLangLexicon::Impl {
 
     for (const auto &word : words) {
       if (IsPunctuation(word)) {
+        if (!token2id_.count(word)) {
+          if (debug_) {
+            SHERPA_ONNX_LOGE("Skip unknown punctuation: %s", word.c_str());
+          }
+          continue;
+        }
+
         this_sentence.push_back(token2id_.at(word));
 
         if (this_sentence.size() > max_len - 2) {
