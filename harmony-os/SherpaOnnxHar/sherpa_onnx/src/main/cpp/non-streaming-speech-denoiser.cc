@@ -265,9 +265,139 @@ static Napi::Number OfflineSpeechDenoiserGetSampleRateWrapper(
   return Napi::Number::New(env, sample_rate);
 }
 
+static SherpaOnnxOfflineSpeechDenoiserConfig ParseDenoiserConfig(
+    Napi::Object o) {
+  SherpaOnnxOfflineSpeechDenoiserConfig c;
+  memset(&c, 0, sizeof(c));
+  c.model = GetOfflineSpeechDenoiserModelConfig(o);
+  return c;
+}
+
+static void FreeDenoiserConfig(SherpaOnnxOfflineSpeechDenoiserConfig &c) {
+  SHERPA_ONNX_DELETE_C_STR(c.model.gtcrn.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.provider);
+}
+
+class CreateOfflineSpeechDenoiserWorker : public Napi::AsyncWorker {
+ public:
+#if __OHOS__
+  CreateOfflineSpeechDenoiserWorker(
+      const Napi::Env &env,
+      const SherpaOnnxOfflineSpeechDenoiserConfig &config,
+      NativeResourceManager *mgr)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config), mgr_(mgr) {}
+#else
+  CreateOfflineSpeechDenoiserWorker(
+      const Napi::Env &env,
+      const SherpaOnnxOfflineSpeechDenoiserConfig &config)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config) {}
+#endif
+
+  ~CreateOfflineSpeechDenoiserWorker() {
+    FreeDenoiserConfig(config_);
+#if __OHOS__
+    if (mgr_) {
+      OH_ResourceManager_ReleaseNativeResourceManager(mgr_);
+    }
+#endif
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+#if __OHOS__
+    if (mgr_) {
+      sd_ = SherpaOnnxCreateOfflineSpeechDenoiserOHOS(&config_, mgr_);
+    } else {
+      sd_ = SherpaOnnxCreateOfflineSpeechDenoiser(&config_);
+    }
+#else
+    sd_ = SherpaOnnxCreateOfflineSpeechDenoiser(&config_);
+#endif
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!sd_) {
+      deferred_.Reject(
+          Napi::TypeError::New(env, "Please check your config!").Value());
+      return;
+    }
+
+    auto external = Napi::External<SherpaOnnxOfflineSpeechDenoiser>::New(
+        env, const_cast<SherpaOnnxOfflineSpeechDenoiser *>(sd_),
+        [](Napi::Env env, SherpaOnnxOfflineSpeechDenoiser *sd) {
+          SherpaOnnxDestroyOfflineSpeechDenoiser(sd);
+        });
+
+    deferred_.Resolve(external);
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  SherpaOnnxOfflineSpeechDenoiserConfig config_;
+  const SherpaOnnxOfflineSpeechDenoiser *sd_ = nullptr;
+#if __OHOS__
+  NativeResourceManager *mgr_ = nullptr;
+#endif
+};
+
+static Napi::Value CreateOfflineSpeechDenoiserAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+#if __OHOS__
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxOfflineSpeechDenoiserConfig c = ParseDenoiserConfig(o);
+
+#if __OHOS__
+  NativeResourceManager *mgr =
+      OH_ResourceManager_InitNativeResourceManager(env, info[1]);
+
+  CreateOfflineSpeechDenoiserWorker *worker =
+      new CreateOfflineSpeechDenoiserWorker(env, c, mgr);
+#else
+  CreateOfflineSpeechDenoiserWorker *worker =
+      new CreateOfflineSpeechDenoiserWorker(env, c);
+#endif
+  worker->Queue();
+
+  return worker->Promise();
+}
+
 void InitNonStreamingSpeechDenoiser(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "createOfflineSpeechDenoiser"),
               Napi::Function::New(env, CreateOfflineSpeechDenoiserWrapper));
+
+  exports.Set(Napi::String::New(env, "createOfflineSpeechDenoiserAsync"),
+              Napi::Function::New(env,
+                                  CreateOfflineSpeechDenoiserAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "offlineSpeechDenoiserRunWrapper"),
               Napi::Function::New(env, OfflineSpeechDenoiserRunWrapper));

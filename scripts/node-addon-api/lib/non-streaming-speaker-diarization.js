@@ -1,11 +1,16 @@
 const addon = require('./addon.js');
 
 class OfflineSpeakerDiarization {
-  constructor(config) {
-    this.handle = addon.createOfflineSpeakerDiarization(config);
-    this.config = config;
-
+  constructor(handle) {
+    this.handle = handle;
     this.sampleRate = addon.getOfflineSpeakerDiarizationSampleRate(this.handle);
+  }
+
+  static async createAsync(config) {
+    const handle = await addon.createOfflineSpeakerDiarizationAsync(config);
+    const sd = new OfflineSpeakerDiarization(handle);
+    sd.config = config;
+    return sd;
   }
 
   /**

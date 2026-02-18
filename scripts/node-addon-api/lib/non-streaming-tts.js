@@ -1,12 +1,15 @@
 const addon = require('./addon.js');
 
 class OfflineTts {
-  constructor(config) {
-    this.handle = addon.createOfflineTts(config);
-    this.config = config;
-
+  constructor(handle) {
+    this.handle = handle;
     this.numSpeakers = addon.getOfflineTtsNumSpeakers(this.handle);
     this.sampleRate = addon.getOfflineTtsSampleRate(this.handle);
+  }
+
+  static async createAsync(config) {
+    const handle = await addon.createOfflineTtsAsync(config);
+    return new OfflineTts(handle);
   }
 
   /*

@@ -773,9 +773,158 @@ static Napi::Array SpeakerEmbeddingManagerGetAllSpeakersWrapper(
   return ans;
 }
 
+static SherpaOnnxSpeakerEmbeddingExtractorConfig ParseSpeakerExtractorConfig(
+    Napi::Object o) {
+  SherpaOnnxSpeakerEmbeddingExtractorConfig c;
+  memset(&c, 0, sizeof(c));
+
+  SHERPA_ONNX_ASSIGN_ATTR_STR(model, model);
+  SHERPA_ONNX_ASSIGN_ATTR_INT32(num_threads, numThreads);
+
+  if (o.Has("debug") &&
+      (o.Get("debug").IsNumber() || o.Get("debug").IsBoolean())) {
+    if (o.Get("debug").IsBoolean()) {
+      c.debug = o.Get("debug").As<Napi::Boolean>().Value();
+    } else {
+      c.debug = o.Get("debug").As<Napi::Number>().Int32Value();
+    }
+  }
+
+  SHERPA_ONNX_ASSIGN_ATTR_STR(provider, provider);
+
+  return c;
+}
+
+static void FreeSpeakerExtractorConfig(
+    SherpaOnnxSpeakerEmbeddingExtractorConfig &c) {
+  SHERPA_ONNX_DELETE_C_STR(c.model);
+  SHERPA_ONNX_DELETE_C_STR(c.provider);
+}
+
+class CreateSpeakerEmbeddingExtractorWorker : public Napi::AsyncWorker {
+ public:
+#if __OHOS__
+  CreateSpeakerEmbeddingExtractorWorker(
+      const Napi::Env &env,
+      const SherpaOnnxSpeakerEmbeddingExtractorConfig &config,
+      NativeResourceManager *mgr)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config), mgr_(mgr) {}
+#else
+  CreateSpeakerEmbeddingExtractorWorker(
+      const Napi::Env &env,
+      const SherpaOnnxSpeakerEmbeddingExtractorConfig &config)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config) {}
+#endif
+
+  ~CreateSpeakerEmbeddingExtractorWorker() {
+    FreeSpeakerExtractorConfig(config_);
+#if __OHOS__
+    if (mgr_) {
+      OH_ResourceManager_ReleaseNativeResourceManager(mgr_);
+    }
+#endif
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+#if __OHOS__
+    if (mgr_) {
+      extractor_ =
+          SherpaOnnxCreateSpeakerEmbeddingExtractorOHOS(&config_, mgr_);
+    } else {
+      extractor_ = SherpaOnnxCreateSpeakerEmbeddingExtractor(&config_);
+    }
+#else
+    extractor_ = SherpaOnnxCreateSpeakerEmbeddingExtractor(&config_);
+#endif
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!extractor_) {
+      deferred_.Reject(
+          Napi::TypeError::New(env, "Please check your config!").Value());
+      return;
+    }
+
+    auto external = Napi::External<SherpaOnnxSpeakerEmbeddingExtractor>::New(
+        env,
+        const_cast<SherpaOnnxSpeakerEmbeddingExtractor *>(extractor_),
+        [](Napi::Env env, SherpaOnnxSpeakerEmbeddingExtractor *extractor) {
+          SherpaOnnxDestroySpeakerEmbeddingExtractor(extractor);
+        });
+
+    deferred_.Resolve(external);
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  SherpaOnnxSpeakerEmbeddingExtractorConfig config_;
+  const SherpaOnnxSpeakerEmbeddingExtractor *extractor_ = nullptr;
+#if __OHOS__
+  NativeResourceManager *mgr_ = nullptr;
+#endif
+};
+
+static Napi::Value CreateSpeakerEmbeddingExtractorAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+#if __OHOS__
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxSpeakerEmbeddingExtractorConfig c =
+      ParseSpeakerExtractorConfig(o);
+
+#if __OHOS__
+  NativeResourceManager *mgr =
+      OH_ResourceManager_InitNativeResourceManager(env, info[1]);
+
+  CreateSpeakerEmbeddingExtractorWorker *worker =
+      new CreateSpeakerEmbeddingExtractorWorker(env, c, mgr);
+#else
+  CreateSpeakerEmbeddingExtractorWorker *worker =
+      new CreateSpeakerEmbeddingExtractorWorker(env, c);
+#endif
+  worker->Queue();
+
+  return worker->Promise();
+}
+
 void InitSpeakerID(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "createSpeakerEmbeddingExtractor"),
               Napi::Function::New(env, CreateSpeakerEmbeddingExtractorWrapper));
+
+  exports.Set(
+      Napi::String::New(env, "createSpeakerEmbeddingExtractorAsync"),
+      Napi::Function::New(env,
+                          CreateSpeakerEmbeddingExtractorAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "speakerEmbeddingExtractorDim"),
               Napi::Function::New(env, SpeakerEmbeddingExtractorDimWrapper));

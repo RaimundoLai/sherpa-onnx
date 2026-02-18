@@ -146,39 +146,7 @@ static SherpaOnnxOfflineTtsModelConfig GetOfflineTtsModelConfig(
   return c;
 }
 
-static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
-    const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-#if __OHOS__
-  // the last argument is the NativeResourceManager
-  if (info.Length() != 2) {
-    std::ostringstream os;
-    os << "Expect only 2 arguments. Given: " << info.Length();
-
-    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
-
-    return {};
-  }
-#else
-  if (info.Length() != 1) {
-    std::ostringstream os;
-    os << "Expect only 1 argument. Given: " << info.Length();
-
-    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
-
-    return {};
-  }
-#endif
-
-  if (!info[0].IsObject()) {
-    Napi::TypeError::New(env, "Expect an object as the argument")
-        .ThrowAsJavaScriptException();
-
-    return {};
-  }
-
-  Napi::Object o = info[0].As<Napi::Object>();
-
+static SherpaOnnxOfflineTtsConfig ParseTtsConfig(Napi::Object o) {
   SherpaOnnxOfflineTtsConfig c;
   memset(&c, 0, sizeof(c));
 
@@ -189,16 +157,10 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   SHERPA_ONNX_ASSIGN_ATTR_STR(rule_fars, ruleFars);
   SHERPA_ONNX_ASSIGN_ATTR_FLOAT(silence_scale, silenceScale);
 
-#if __OHOS__
-  std::unique_ptr<NativeResourceManager,
-                  decltype(&OH_ResourceManager_ReleaseNativeResourceManager)>
-      mgr(OH_ResourceManager_InitNativeResourceManager(env, info[1]),
-          &OH_ResourceManager_ReleaseNativeResourceManager);
-  const SherpaOnnxOfflineTts *tts =
-      SherpaOnnxCreateOfflineTtsOHOS(&c, mgr.get());
-#else
-  const SherpaOnnxOfflineTts *tts = SherpaOnnxCreateOfflineTts(&c);
-#endif
+  return c;
+}
+
+static void FreeTtsConfig(const SherpaOnnxOfflineTtsConfig &c) {
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.model);
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.lexicon);
   SHERPA_ONNX_DELETE_C_STR(c.model.vits.tokens);
@@ -236,6 +198,53 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
 
   SHERPA_ONNX_DELETE_C_STR(c.rule_fsts);
   SHERPA_ONNX_DELETE_C_STR(c.rule_fars);
+}
+
+static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+#if __OHOS__
+  // the last argument is the NativeResourceManager
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return {};
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return {};
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return {};
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxOfflineTtsConfig c = ParseTtsConfig(o);
+
+#if __OHOS__
+  std::unique_ptr<NativeResourceManager,
+                  decltype(&OH_ResourceManager_ReleaseNativeResourceManager)>
+      mgr(OH_ResourceManager_InitNativeResourceManager(env, info[1]),
+          &OH_ResourceManager_ReleaseNativeResourceManager);
+  const SherpaOnnxOfflineTts *tts =
+      SherpaOnnxCreateOfflineTtsOHOS(&c, mgr.get());
+#else
+  const SherpaOnnxOfflineTts *tts = SherpaOnnxCreateOfflineTts(&c);
+#endif
+  FreeTtsConfig(c);
 
   if (!tts) {
     Napi::TypeError::New(env, "Please check your config!")
@@ -249,6 +258,116 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
       [](Napi::Env env, SherpaOnnxOfflineTts *tts) {
         SherpaOnnxDestroyOfflineTts(tts);
       });
+}
+
+class CreateOfflineTtsWorker : public Napi::AsyncWorker {
+ public:
+#if __OHOS__
+  CreateOfflineTtsWorker(const Napi::Env &env,
+                         const SherpaOnnxOfflineTtsConfig &config,
+                         NativeResourceManager *mgr)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config), mgr_(mgr) {}
+#else
+  CreateOfflineTtsWorker(const Napi::Env &env,
+                         const SherpaOnnxOfflineTtsConfig &config)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config) {}
+#endif
+
+  ~CreateOfflineTtsWorker() {
+    FreeTtsConfig(config_);
+#if __OHOS__
+    if (mgr_) {
+      OH_ResourceManager_ReleaseNativeResourceManager(mgr_);
+    }
+#endif
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+#if __OHOS__
+    if (mgr_) {
+      tts_ = SherpaOnnxCreateOfflineTtsOHOS(&config_, mgr_);
+    } else {
+      tts_ = SherpaOnnxCreateOfflineTts(&config_);
+    }
+#else
+    tts_ = SherpaOnnxCreateOfflineTts(&config_);
+#endif
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!tts_) {
+      deferred_.Reject(
+          Napi::TypeError::New(env, "Please check your config!").Value());
+      return;
+    }
+
+    auto external = Napi::External<SherpaOnnxOfflineTts>::New(
+        env, const_cast<SherpaOnnxOfflineTts *>(tts_),
+        [](Napi::Env env, SherpaOnnxOfflineTts *tts) {
+          SherpaOnnxDestroyOfflineTts(tts);
+        });
+
+    deferred_.Resolve(external);
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  SherpaOnnxOfflineTtsConfig config_;
+  const SherpaOnnxOfflineTts *tts_ = nullptr;
+#if __OHOS__
+  NativeResourceManager *mgr_ = nullptr;
+#endif
+};
+
+static Napi::Value CreateOfflineTtsAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+#if __OHOS__
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxOfflineTtsConfig c = ParseTtsConfig(o);
+
+#if __OHOS__
+  NativeResourceManager *mgr =
+      OH_ResourceManager_InitNativeResourceManager(env, info[1]);
+
+  CreateOfflineTtsWorker *worker = new CreateOfflineTtsWorker(env, c, mgr);
+#else
+  CreateOfflineTtsWorker *worker = new CreateOfflineTtsWorker(env, c);
+#endif
+  worker->Queue();
+
+  return worker->Promise();
 }
 
 static Napi::Number OfflineTtsSampleRateWrapper(
@@ -730,6 +849,9 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
 void InitNonStreamingTts(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "createOfflineTts"),
               Napi::Function::New(env, CreateOfflineTtsWrapper));
+
+  exports.Set(Napi::String::New(env, "createOfflineTtsAsync"),
+              Napi::Function::New(env, CreateOfflineTtsAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "getOfflineTtsSampleRate"),
               Napi::Function::New(env, OfflineTtsSampleRateWrapper));

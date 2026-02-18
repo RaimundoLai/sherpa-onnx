@@ -3,9 +3,19 @@ const streaming_asr = require('./streaming-asr.js');
 
 class SpeakerEmbeddingExtractor {
   constructor(config) {
-    this.handle = addon.createSpeakerEmbeddingExtractor(config);
-    this.config = config;
+    if (typeof config === 'object' && config !== null && config._handle) {
+      this.handle = config._handle;
+      this.config = config._config || {};
+    } else {
+      this.handle = addon.createSpeakerEmbeddingExtractor(config);
+      this.config = config;
+    }
     this.dim = addon.speakerEmbeddingExtractorDim(this.handle);
+  }
+
+  static async createAsync(config) {
+    const handle = await addon.createSpeakerEmbeddingExtractorAsync(config);
+    return new SpeakerEmbeddingExtractor({_handle: handle, _config: config});
   }
 
   createStream() {
