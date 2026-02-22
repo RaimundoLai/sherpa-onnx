@@ -1,6 +1,7 @@
 import {
   acceptWaveformOffline,
   createOfflineRecognizer,
+  createOfflineRecognizerAsync,
   createOfflineStream,
   decodeOfflineStream,
   getOfflineStreamResultAsJson,
@@ -161,9 +162,21 @@ export class OfflineRecognizer {
   public handle: object;
   public config: OfflineRecognizerConfig;
 
-  constructor(config: OfflineRecognizerConfig, mgr?: object) {
-    this.handle = createOfflineRecognizer(config, mgr);
-    this.config = config
+  constructor(configOrHandle: OfflineRecognizerConfig | object, mgr?: object) {
+    if (configOrHandle instanceof OfflineRecognizerConfig) {
+      this.handle = createOfflineRecognizer(configOrHandle, mgr);
+      this.config = configOrHandle;
+    } else {
+      this.handle = configOrHandle;
+      this.config = new OfflineRecognizerConfig();
+    }
+  }
+
+  static async createAsync(config: OfflineRecognizerConfig, mgr?: object): Promise<OfflineRecognizer> {
+    const handle: object = await createOfflineRecognizerAsync(config, mgr);
+    const recognizer = new OfflineRecognizer(handle);
+    recognizer.config = config;
+    return recognizer;
   }
 
   setConfig(config: OfflineRecognizerConfig) {

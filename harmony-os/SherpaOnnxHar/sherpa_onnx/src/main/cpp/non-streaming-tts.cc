@@ -94,6 +94,32 @@ static SherpaOnnxOfflineTtsChatterboxModelConfig GetOfflineTtsChatterboxModelCon
 
   return c;
 }
+static SherpaOnnxOfflineTtsMiocodecLlamaModelConfig
+GetOfflineTtsMiocodecLlamaModelConfig(Napi::Object obj) {
+  SherpaOnnxOfflineTtsMiocodecLlamaModelConfig c;
+  memset(&c, 0, sizeof(c));
+
+  if (!obj.Has("miocodecLlama") || !obj.Get("miocodecLlama").IsObject()) {
+    return c;
+  }
+
+  Napi::Object o = obj.Get("miocodecLlama").As<Napi::Object>();
+  SHERPA_ONNX_ASSIGN_ATTR_STR(model, model);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(campplus_model, campplusModel);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(miocodec_encoder, miocodecEncoder);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(miocodec_decoder, miocodecDecoder);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(embeddings, embeddings);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(tokens, tokens);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(lexicon, lexicon);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(g2p_model, g2pModel);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(temperature, temperature);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(top_p, topP);
+  SHERPA_ONNX_ASSIGN_ATTR_INT32(max_tokens, maxTokens);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(repetition_penalty, repetitionPenalty);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(perth_watermarker, perthWatermarker);
+
+  return c;
+}
 static SherpaOnnxOfflineTtsKittenModelConfig GetOfflineTtsKittenModelConfig(
     Napi::Object obj) {
   SherpaOnnxOfflineTtsKittenModelConfig c;
@@ -129,6 +155,7 @@ static SherpaOnnxOfflineTtsModelConfig GetOfflineTtsModelConfig(
   c.kokoro = GetOfflineTtsKokoroModelConfig(o);
   c.kitten = GetOfflineTtsKittenModelConfig(o);
   c.chatterbox = GetOfflineTtsChatterboxModelConfig(o);
+  c.miocodec_llama = GetOfflineTtsMiocodecLlamaModelConfig(o);
 
   SHERPA_ONNX_ASSIGN_ATTR_INT32(num_threads, numThreads);
 
@@ -144,6 +171,70 @@ static SherpaOnnxOfflineTtsModelConfig GetOfflineTtsModelConfig(
   SHERPA_ONNX_ASSIGN_ATTR_STR(provider, provider);
 
   return c;
+}
+
+static SherpaOnnxOfflineTtsConfig ParseTtsConfig(Napi::Object o) {
+  SherpaOnnxOfflineTtsConfig c;
+  memset(&c, 0, sizeof(c));
+
+  c.model = GetOfflineTtsModelConfig(o);
+
+  SHERPA_ONNX_ASSIGN_ATTR_STR(rule_fsts, ruleFsts);
+  SHERPA_ONNX_ASSIGN_ATTR_INT32(max_num_sentences, maxNumSentences);
+  SHERPA_ONNX_ASSIGN_ATTR_STR(rule_fars, ruleFars);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(silence_scale, silenceScale);
+
+  return c;
+}
+
+static void FreeTtsConfig(const SherpaOnnxOfflineTtsConfig &c) {
+  SHERPA_ONNX_DELETE_C_STR(c.model.vits.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.vits.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.vits.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.vits.data_dir);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.acoustic_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.vocoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.data_dir);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.voices);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.data_dir);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.voices);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.g2p_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lang);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.speech_encoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.embed_tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.language_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.conditional_decoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.tokenizer);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lang);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.cangjie_dict);
+  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.perth_watermarker);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.campplus_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.miocodec_encoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.miocodec_decoder);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.embeddings);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.tokens);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.lexicon);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.g2p_model);
+  SHERPA_ONNX_DELETE_C_STR(c.model.miocodec_llama.perth_watermarker);
+
+  SHERPA_ONNX_DELETE_C_STR(c.model.provider);
+
+  SHERPA_ONNX_DELETE_C_STR(c.rule_fsts);
+  SHERPA_ONNX_DELETE_C_STR(c.rule_fars);
 }
 
 static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
@@ -178,16 +269,7 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
   }
 
   Napi::Object o = info[0].As<Napi::Object>();
-
-  SherpaOnnxOfflineTtsConfig c;
-  memset(&c, 0, sizeof(c));
-
-  c.model = GetOfflineTtsModelConfig(o);
-
-  SHERPA_ONNX_ASSIGN_ATTR_STR(rule_fsts, ruleFsts);
-  SHERPA_ONNX_ASSIGN_ATTR_INT32(max_num_sentences, maxNumSentences);
-  SHERPA_ONNX_ASSIGN_ATTR_STR(rule_fars, ruleFars);
-  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(silence_scale, silenceScale);
+  SherpaOnnxOfflineTtsConfig c = ParseTtsConfig(o);
 
 #if __OHOS__
   std::unique_ptr<NativeResourceManager,
@@ -199,43 +281,7 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
 #else
   const SherpaOnnxOfflineTts *tts = SherpaOnnxCreateOfflineTts(&c);
 #endif
-  SHERPA_ONNX_DELETE_C_STR(c.model.vits.model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.vits.lexicon);
-  SHERPA_ONNX_DELETE_C_STR(c.model.vits.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.vits.data_dir);
-
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.acoustic_model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.vocoder);
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.lexicon);
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.matcha.data_dir);
-
-  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.voices);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kitten.data_dir);
-
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.voices);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lexicon);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.g2p_model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.kokoro.lang);
-
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.speech_encoder);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.embed_tokens);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.language_model);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.conditional_decoder);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.tokenizer);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lang);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.lexicon);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.cangjie_dict);
-  SHERPA_ONNX_DELETE_C_STR(c.model.chatterbox.perth_watermarker);
-
-  SHERPA_ONNX_DELETE_C_STR(c.model.provider);
-
-  SHERPA_ONNX_DELETE_C_STR(c.rule_fsts);
-  SHERPA_ONNX_DELETE_C_STR(c.rule_fars);
+  FreeTtsConfig(c);
 
   if (!tts) {
     Napi::TypeError::New(env, "Please check your config!")
@@ -249,6 +295,116 @@ static Napi::External<SherpaOnnxOfflineTts> CreateOfflineTtsWrapper(
       [](Napi::Env env, SherpaOnnxOfflineTts *tts) {
         SherpaOnnxDestroyOfflineTts(tts);
       });
+}
+
+class CreateOfflineTtsWorker : public Napi::AsyncWorker {
+ public:
+#if __OHOS__
+  CreateOfflineTtsWorker(const Napi::Env &env,
+                         const SherpaOnnxOfflineTtsConfig &config,
+                         NativeResourceManager *mgr)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config), mgr_(mgr) {}
+#else
+  CreateOfflineTtsWorker(const Napi::Env &env,
+                         const SherpaOnnxOfflineTtsConfig &config)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config) {}
+#endif
+
+  ~CreateOfflineTtsWorker() {
+    FreeTtsConfig(config_);
+#if __OHOS__
+    if (mgr_) {
+      OH_ResourceManager_ReleaseNativeResourceManager(mgr_);
+    }
+#endif
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+#if __OHOS__
+    if (mgr_) {
+      tts_ = SherpaOnnxCreateOfflineTtsOHOS(&config_, mgr_);
+    } else {
+      tts_ = SherpaOnnxCreateOfflineTts(&config_);
+    }
+#else
+    tts_ = SherpaOnnxCreateOfflineTts(&config_);
+#endif
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!tts_) {
+      deferred_.Reject(
+          Napi::TypeError::New(env, "Please check your config!").Value());
+      return;
+    }
+
+    auto external = Napi::External<SherpaOnnxOfflineTts>::New(
+        env, const_cast<SherpaOnnxOfflineTts *>(tts_),
+        [](Napi::Env env, SherpaOnnxOfflineTts *tts) {
+          SherpaOnnxDestroyOfflineTts(tts);
+        });
+
+    deferred_.Resolve(external);
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  SherpaOnnxOfflineTtsConfig config_;
+  const SherpaOnnxOfflineTts *tts_ = nullptr;
+#if __OHOS__
+  NativeResourceManager *mgr_ = nullptr;
+#endif
+};
+
+static Napi::Value CreateOfflineTtsAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+#if __OHOS__
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxOfflineTtsConfig c = ParseTtsConfig(o);
+
+#if __OHOS__
+  NativeResourceManager *mgr =
+      OH_ResourceManager_InitNativeResourceManager(env, info[1]);
+
+  CreateOfflineTtsWorker *worker = new CreateOfflineTtsWorker(env, c, mgr);
+#else
+  CreateOfflineTtsWorker *worker = new CreateOfflineTtsWorker(env, c);
+#endif
+  worker->Queue();
+
+  return worker->Promise();
 }
 
 static Napi::Number OfflineTtsSampleRateWrapper(
@@ -401,9 +557,21 @@ static Napi::Object OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
     Napi::String _lang = obj.Get("lang").As<Napi::String>();
     lang = _lang.Utf8Value();
   }
-  const SherpaOnnxGeneratedAudio *audio;
-  audio = SherpaOnnxOfflineTtsGenerate(tts, text.c_str(), sid, speed, g2p, lang.c_str());
+  const SherpaOnnxGeneratedAudio *audio = nullptr;
+  if (obj.Has("audioDir") && obj.Get("audioDir").IsString()) {
+    std::string audio_dir = obj.Get("audioDir").As<Napi::String>().Utf8Value();
+    audio = SherpaOnnxOfflineTtsGenerateWithMiocodecLlama(tts, text.c_str(), audio_dir.c_str(), speed, lang.c_str(), nullptr, nullptr);
+  } else {
+    try {
+      audio = SherpaOnnxOfflineTtsGenerate(tts, text.c_str(), sid, speed, g2p, lang.c_str());
+    } catch (...) {
+      audio = nullptr;
+    }
+  }
 
+  if (!audio) {
+    return env.Null();
+  }
   if (enable_external_buffer) {
     Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
         env, const_cast<float *>(audio->samples), sizeof(float) * audio->n,
@@ -727,9 +895,411 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
   return worker->Promise();
 }
 
+static Napi::Object GetEmbeddingsObject(Napi::Env env, 
+    const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *emb) {
+  Napi::Object obj = Napi::Object::New(env);
+  
+  if (emb) {
+    // Speaker Embedding
+    Napi::Float32Array spk = Napi::Float32Array::New(env, emb->speaker_embedding_dim);
+    memcpy(spk.Data(), emb->speaker_embedding, emb->speaker_embedding_dim * sizeof(float));
+    obj.Set("speakerEmbedding", spk);
+
+    // Global Embedding
+    Napi::Float32Array global = Napi::Float32Array::New(env, emb->global_embedding_dim);
+    memcpy(global.Data(), emb->global_embedding, emb->global_embedding_dim * sizeof(float));
+    obj.Set("globalEmbedding", global);
+  }
+  
+  return obj;
+}
+
+static Napi::Value OfflineTtsExtractMiocodecLlamaEmbeddingsWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() != 2) {
+    Napi::TypeError::New(env, "Expect 2 arguments: tts, audioDir").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+  std::string audio_dir = info[1].As<Napi::String>().Utf8Value();
+
+  const auto *emb = SherpaOnnxOfflineTtsMiocodecLlamaExtractEmbeddings(tts, audio_dir.c_str());
+  if (!emb) {
+    return env.Undefined();
+  }
+  
+  Napi::Object result = GetEmbeddingsObject(env, emb);
+  SherpaOnnxDestroyOfflineTtsMiocodecLlamaEmbeddings(emb);
+  return result;
+}
+
+class OfflineTtsMiocodecLlamaExtractEmbeddingsWorker : public Napi::AsyncWorker {
+ public:
+  OfflineTtsMiocodecLlamaExtractEmbeddingsWorker(Napi::Env env,
+                                                 const SherpaOnnxOfflineTts *tts,
+                                                 std::string audio_dir)
+      : Napi::AsyncWorker(env), tts_(tts), audio_dir_(std::move(audio_dir)), emb_(nullptr), deferred_(Napi::Promise::Deferred::New(env)) {}
+
+  ~OfflineTtsMiocodecLlamaExtractEmbeddingsWorker() {
+    if (emb_) {
+      SherpaOnnxDestroyOfflineTtsMiocodecLlamaEmbeddings(emb_);
+    }
+  }
+
+  void Execute() override {
+    emb_ = SherpaOnnxOfflineTtsMiocodecLlamaExtractEmbeddings(tts_, audio_dir_.c_str());
+  }
+
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    if (emb_) {
+      deferred_.Resolve(GetEmbeddingsObject(Env(), emb_));
+    } else {
+       deferred_.Resolve(Env().Undefined());
+    }
+  }
+  
+  void OnError(const Napi::Error& e) override {
+      deferred_.Reject(Napi::String::New(Env(), e.Message()));
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ private:
+  const SherpaOnnxOfflineTts *tts_;
+  std::string audio_dir_;
+  const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *emb_;
+  Napi::Promise::Deferred deferred_;
+};
+
+static Napi::Value OfflineTtsExtractMiocodecLlamaEmbeddingsAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() != 2) {
+      // tts, audioDir
+    Napi::TypeError::New(env, "Expect 2 arguments: tts, audioDir").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+  std::string audio_dir = info[1].As<Napi::String>().Utf8Value();
+
+  auto *worker = new OfflineTtsMiocodecLlamaExtractEmbeddingsWorker(env, tts, audio_dir);
+  worker->Queue();
+  return worker->Promise();
+}
+
+// --------------------------------------------------------------------------------
+
+class OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWorker : public Napi::AsyncWorker {
+ public:
+  OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWorker(Napi::Env env,
+                                                      const SherpaOnnxOfflineTts *tts,
+                                                      std::string text,
+                                                      std::vector<float> spk_emb,
+                                                      std::vector<float> global_emb,
+                                                      float speed,
+                                                      std::string lang)
+      : Napi::AsyncWorker(env), 
+        tts_(tts), 
+        text_(std::move(text)), 
+        spk_emb_(std::move(spk_emb)), 
+        global_emb_(std::move(global_emb)), 
+        speed_(speed), 
+        lang_(std::move(lang)),
+        audio_(nullptr),
+        deferred_(Napi::Promise::Deferred::New(env)) {}
+
+  ~OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWorker() {
+    if (audio_) {
+      SherpaOnnxDestroyOfflineTtsGeneratedAudio(audio_);
+    }
+  }
+
+  void Execute() override {
+    SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings embeddings;
+    embeddings.speaker_embedding = spk_emb_.data();
+    embeddings.speaker_embedding_dim = static_cast<int32_t>(spk_emb_.size());
+    embeddings.global_embedding = global_emb_.data();
+    embeddings.global_embedding_dim = static_cast<int32_t>(global_emb_.size());
+
+    // We pass nullptr for callback as supporting JS callback in async generation is complex 
+    // and handled by TtsGenerateWorker usually, but TtsGenerateWorker handles generic Generate.
+    // Here we implement specific one. If progress callback is strictly needed, 
+    // it requires TSFN logic similar to TtsGenerateWorker.
+    // For now, let's assume no progress callback for this specific async wrapper 
+    // unless requested. Given complexity, we'll omit callback support for this async wrapper
+    // or reuse TtsGenerateWorker structure if possible? No, signatures differ.
+    // So we just run it without callback.
+
+    audio_ = SherpaOnnxOfflineTtsGenerateWithMiocodecLlamaEmbeddings(
+        tts_, text_.c_str(), &embeddings, speed_, lang_.c_str(), nullptr, nullptr);
+  }
+
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    if (audio_) {
+        Napi::Object result = Napi::Object::New(Env());
+        
+        Napi::ArrayBuffer arrayBuffer =
+            Napi::ArrayBuffer::New(Env(), sizeof(float) * audio_->n);
+        Napi::Float32Array float32Array =
+            Napi::Float32Array::New(Env(), audio_->n, arrayBuffer, 0);
+        std::copy(audio_->samples, audio_->samples + audio_->n,
+                  float32Array.Data());
+
+        result.Set("samples", float32Array);
+        result.Set("sampleRate", audio_->sample_rate);
+        deferred_.Resolve(result);
+    } else {
+       deferred_.Resolve(Env().Undefined());
+    }
+  }
+  
+  void OnError(const Napi::Error& e) override {
+    deferred_.Reject(Napi::String::New(Env(), e.Message()));
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ private:
+  const SherpaOnnxOfflineTts *tts_;
+  std::string text_;
+  std::vector<float> spk_emb_;
+  std::vector<float> global_emb_;
+  float speed_;
+  std::string lang_;
+  const SherpaOnnxGeneratedAudio *audio_;
+  Napi::Promise::Deferred deferred_;
+};
+
+class OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWorker : public Napi::AsyncWorker {
+ public:
+  OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWorker(
+      Napi::Env env, const SherpaOnnxOfflineTts *tts, std::string source_audio,
+      std::vector<float> global_emb, float speed)
+      : Napi::AsyncWorker(env),
+        tts_(tts),
+        source_audio_(std::move(source_audio)),
+        global_emb_(std::move(global_emb)),
+        speed_(speed),
+        audio_(nullptr),
+        deferred_(Napi::Promise::Deferred::New(env)) {}
+
+  ~OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWorker() override {
+    if (audio_) {
+      SherpaOnnxDestroyOfflineTtsGeneratedAudio(audio_);
+    }
+  }
+
+  void Execute() override {
+    SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings embeddings;
+    embeddings.speaker_embedding = nullptr;
+    embeddings.speaker_embedding_dim = 0;
+    embeddings.global_embedding = global_emb_.data();
+    embeddings.global_embedding_dim = global_emb_.size();
+
+    audio_ = SherpaOnnxOfflineTtsMiocodecLlamaConvertVoiceWithEmbeddings(
+        tts_, source_audio_.c_str(), &embeddings, speed_, nullptr, nullptr);
+  }
+
+  void OnOK() override {
+    if (!audio_) {
+      deferred_.Resolve(Env().Undefined());
+    } else {
+      Napi::Object obj = Napi::Object::New(Env());
+      
+      Napi::ArrayBuffer arrayBuffer =
+          Napi::ArrayBuffer::New(Env(), sizeof(float) * audio_->n);
+      Napi::Float32Array float32Array =
+          Napi::Float32Array::New(Env(), audio_->n, arrayBuffer, 0);
+      std::copy(audio_->samples, audio_->samples + audio_->n,
+                float32Array.Data());
+
+      obj.Set("samples", float32Array);
+      obj.Set("sampleRate", audio_->sample_rate);
+      deferred_.Resolve(obj);
+    }
+  }
+
+  void OnError(const Napi::Error& e) override {
+    deferred_.Reject(Napi::String::New(Env(), e.Message()));
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ private:
+  const SherpaOnnxOfflineTts *tts_;
+  std::string source_audio_;
+  std::vector<float> global_emb_;
+  float speed_;
+  const SherpaOnnxGeneratedAudio *audio_;
+  Napi::Promise::Deferred deferred_;
+};
+
+static Napi::Value OfflineTtsGenerateWithMiocodecLlamaEmbeddingsAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Expect at least 2 arguments: tts, obj").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+  
+  Napi::Object obj = info[1].As<Napi::Object>();
+  
+  std::string text = obj.Get("text").As<Napi::String>().Utf8Value();
+  
+  Napi::Float32Array spk = obj.Get("speakerEmbedding").As<Napi::Float32Array>();
+  std::vector<float> spk_vec(spk.Data(), spk.Data() + spk.ElementLength());
+  
+  Napi::Float32Array glob = obj.Get("globalEmbedding").As<Napi::Float32Array>();
+  std::vector<float> glob_vec(glob.Data(), glob.Data() + glob.ElementLength());
+  
+  float speed = 1.0f;
+  if (obj.Has("speed")) speed = obj.Get("speed").As<Napi::Number>().FloatValue();
+  
+  std::string lang = "en-us";
+  if (obj.Has("lang")) lang = obj.Get("lang").As<Napi::String>().Utf8Value();
+
+  auto *worker = new OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWorker(
+      env, tts, text, std::move(spk_vec), std::move(glob_vec), speed, lang);
+      
+  worker->Queue();
+  return worker->Promise();
+}
+
+static Napi::Value OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  // similar logic but synchronous
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Expect at least 2 arguments: tts, obj").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+  
+  Napi::Object obj = info[1].As<Napi::Object>();
+  std::string text = obj.Get("text").As<Napi::String>().Utf8Value();
+  
+  Napi::Float32Array spk = obj.Get("speakerEmbedding").As<Napi::Float32Array>();
+  Napi::Float32Array glob = obj.Get("globalEmbedding").As<Napi::Float32Array>();
+  
+  SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings embeddings;
+  embeddings.speaker_embedding = spk.Data();
+  embeddings.speaker_embedding_dim = spk.ElementLength();
+  embeddings.global_embedding = glob.Data();
+  embeddings.global_embedding_dim = glob.ElementLength();
+  
+  float speed = 1.0f;
+  if (obj.Has("speed")) speed = obj.Get("speed").As<Napi::Number>().FloatValue();
+  
+  std::string lang = "en-us";
+  if (obj.Has("lang")) lang = obj.Get("lang").As<Napi::String>().Utf8Value();
+
+  const auto *audio = SherpaOnnxOfflineTtsGenerateWithMiocodecLlamaEmbeddings(
+        tts, text.c_str(), &embeddings, speed, lang.c_str(), nullptr, nullptr);
+
+  if (!audio) return env.Undefined();
+
+  Napi::Object result = Napi::Object::New(env);
+  Napi::Float32Array samples = Napi::Float32Array::New(env, audio->n);
+  memcpy(samples.Data(), audio->samples, audio->n * sizeof(float));
+  result.Set("samples", samples);
+  result.Set("sampleRate", audio->sample_rate);
+  
+  SherpaOnnxDestroyOfflineTtsGeneratedAudio(audio);
+  return result;
+}
+
+static Napi::Value OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Expect at least 2 arguments: tts, obj").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+
+  Napi::Object obj = info[1].As<Napi::Object>();
+  
+  std::string source_audio = "";
+  if (obj.Has("sourceAudio")) {
+    source_audio = obj.Get("sourceAudio").As<Napi::String>().Utf8Value();
+  }
+
+  Napi::Float32Array glob = obj.Get("globalEmbedding").As<Napi::Float32Array>();
+  std::vector<float> glob_vec(glob.Data(), glob.Data() + glob.ElementLength());
+
+  float speed = 1.0f;
+  if (obj.Has("speed")) speed = obj.Get("speed").As<Napi::Number>().FloatValue();
+
+  auto *worker = new OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWorker(
+      env, tts, source_audio, std::move(glob_vec), speed);
+
+  worker->Queue();
+  return worker->Promise();
+}
+
+static Napi::Value OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Expect at least 2 arguments: tts, obj").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  SherpaOnnxOfflineTts *tts =
+      reinterpret_cast<SherpaOnnxOfflineTts *>(info[0].As<Napi::External<void>>().Data());
+
+  Napi::Object obj = info[1].As<Napi::Object>();
+  
+  std::string source_audio = "";
+  if (obj.Has("sourceAudio")) {
+    source_audio = obj.Get("sourceAudio").As<Napi::String>().Utf8Value();
+  }
+
+  Napi::Float32Array glob = obj.Get("globalEmbedding").As<Napi::Float32Array>();
+
+  SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings embeddings;
+  embeddings.speaker_embedding = nullptr;
+  embeddings.speaker_embedding_dim = 0;
+  embeddings.global_embedding = glob.Data();
+  embeddings.global_embedding_dim = glob.ElementLength();
+
+  float speed = 1.0f;
+  if (obj.Has("speed")) speed = obj.Get("speed").As<Napi::Number>().FloatValue();
+
+  const auto *audio = SherpaOnnxOfflineTtsMiocodecLlamaConvertVoiceWithEmbeddings(
+        tts, source_audio.c_str(), &embeddings, speed, nullptr, nullptr);
+
+  if (!audio) return env.Undefined();
+
+  Napi::Object result = Napi::Object::New(env);
+  Napi::Float32Array samples = Napi::Float32Array::New(env, audio->n);
+  memcpy(samples.Data(), audio->samples, audio->n * sizeof(float));
+  result.Set("samples", samples);
+  result.Set("sampleRate", audio->sample_rate);
+
+  SherpaOnnxDestroyOfflineTtsGeneratedAudio(audio);
+  return result;
+}
 void InitNonStreamingTts(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "createOfflineTts"),
               Napi::Function::New(env, CreateOfflineTtsWrapper));
+
+  exports.Set(Napi::String::New(env, "createOfflineTtsAsync"),
+              Napi::Function::New(env, CreateOfflineTtsAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "getOfflineTtsSampleRate"),
               Napi::Function::New(env, OfflineTtsSampleRateWrapper));
@@ -742,4 +1312,22 @@ void InitNonStreamingTts(Napi::Env env, Napi::Object exports) {
 
   exports.Set(Napi::String::New(env, "offlineTtsGenerateAsync"),
               Napi::Function::New(env, OfflineTtsGenerateAsyncWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsExtractMiocodecEmbeddings"),
+              Napi::Function::New(env, OfflineTtsExtractMiocodecLlamaEmbeddingsWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsExtractMiocodecEmbeddingsAsync"),
+              Napi::Function::New(env, OfflineTtsExtractMiocodecLlamaEmbeddingsAsyncWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsGenerateWithMiocodecEmbeddings"),
+              Napi::Function::New(env, OfflineTtsGenerateWithMiocodecLlamaEmbeddingsWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsGenerateWithMiocodecEmbeddingsAsync"),
+              Napi::Function::New(env, OfflineTtsGenerateWithMiocodecLlamaEmbeddingsAsyncWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsConvertVoiceWithMiocodecEmbeddings"),
+              Napi::Function::New(env, OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsWrapper));
+
+  exports.Set(Napi::String::New(env, "offlineTtsConvertVoiceWithMiocodecEmbeddingsAsync"),
+              Napi::Function::New(env, OfflineTtsConvertVoiceWithMiocodecLlamaEmbeddingsAsyncWrapper));
 }

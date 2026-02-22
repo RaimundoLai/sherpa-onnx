@@ -98,6 +98,29 @@ static SherpaOnnxFastClusteringConfig GetFastClusteringConfig(
   return c;
 }
 
+static SherpaOnnxOfflineSpeakerDiarizationConfig ParseDiarizationConfig(
+    Napi::Object o) {
+  SherpaOnnxOfflineSpeakerDiarizationConfig c;
+  memset(&c, 0, sizeof(c));
+
+  c.segmentation = GetOfflineSpeakerSegmentationModelConfig(o);
+  c.embedding = GetSpeakerEmbeddingExtractorConfig(o);
+  c.clustering = GetFastClusteringConfig(o);
+
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(min_duration_on, minDurationOn);
+  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(min_duration_off, minDurationOff);
+
+  return c;
+}
+
+static void FreeDiarizationConfig(
+    const SherpaOnnxOfflineSpeakerDiarizationConfig &c) {
+  SHERPA_ONNX_DELETE_C_STR(c.segmentation.pyannote.model);
+  SHERPA_ONNX_DELETE_C_STR(c.segmentation.provider);
+  SHERPA_ONNX_DELETE_C_STR(c.embedding.model);
+  SHERPA_ONNX_DELETE_C_STR(c.embedding.provider);
+}
+
 static Napi::External<SherpaOnnxOfflineSpeakerDiarization>
 CreateOfflineSpeakerDiarizationWrapper(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -130,16 +153,7 @@ CreateOfflineSpeakerDiarizationWrapper(const Napi::CallbackInfo &info) {
   }
 
   Napi::Object o = info[0].As<Napi::Object>();
-
-  SherpaOnnxOfflineSpeakerDiarizationConfig c;
-  memset(&c, 0, sizeof(c));
-
-  c.segmentation = GetOfflineSpeakerSegmentationModelConfig(o);
-  c.embedding = GetSpeakerEmbeddingExtractorConfig(o);
-  c.clustering = GetFastClusteringConfig(o);
-
-  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(min_duration_on, minDurationOn);
-  SHERPA_ONNX_ASSIGN_ATTR_FLOAT(min_duration_off, minDurationOff);
+  SherpaOnnxOfflineSpeakerDiarizationConfig c = ParseDiarizationConfig(o);
 
 #if __OHOS__
   std::unique_ptr<NativeResourceManager,
@@ -154,10 +168,7 @@ CreateOfflineSpeakerDiarizationWrapper(const Napi::CallbackInfo &info) {
       SherpaOnnxCreateOfflineSpeakerDiarization(&c);
 #endif
 
-  SHERPA_ONNX_DELETE_C_STR(c.segmentation.pyannote.model);
-  SHERPA_ONNX_DELETE_C_STR(c.segmentation.provider);
-  SHERPA_ONNX_DELETE_C_STR(c.embedding.model);
-  SHERPA_ONNX_DELETE_C_STR(c.embedding.provider);
+  FreeDiarizationConfig(c);
 
   if (!sd) {
     Napi::TypeError::New(env, "Please check your config!")
@@ -171,6 +182,120 @@ CreateOfflineSpeakerDiarizationWrapper(const Napi::CallbackInfo &info) {
       [](Napi::Env env, SherpaOnnxOfflineSpeakerDiarization *sd) {
         SherpaOnnxDestroyOfflineSpeakerDiarization(sd);
       });
+}
+
+class CreateOfflineSpeakerDiarizationWorker : public Napi::AsyncWorker {
+ public:
+#if __OHOS__
+  CreateOfflineSpeakerDiarizationWorker(
+      const Napi::Env &env,
+      const SherpaOnnxOfflineSpeakerDiarizationConfig &config,
+      NativeResourceManager *mgr)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config), mgr_(mgr) {}
+#else
+  CreateOfflineSpeakerDiarizationWorker(
+      const Napi::Env &env,
+      const SherpaOnnxOfflineSpeakerDiarizationConfig &config)
+      : Napi::AsyncWorker(env), deferred_(env), config_(config) {}
+#endif
+
+  ~CreateOfflineSpeakerDiarizationWorker() {
+    FreeDiarizationConfig(config_);
+#if __OHOS__
+    if (mgr_) {
+      OH_ResourceManager_ReleaseNativeResourceManager(mgr_);
+    }
+#endif
+  }
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+#if __OHOS__
+    if (mgr_) {
+      sd_ = SherpaOnnxCreateOfflineSpeakerDiarizationOHOS(&config_, mgr_);
+    } else {
+      sd_ = SherpaOnnxCreateOfflineSpeakerDiarization(&config_);
+    }
+#else
+    sd_ = SherpaOnnxCreateOfflineSpeakerDiarization(&config_);
+#endif
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!sd_) {
+      deferred_.Reject(
+          Napi::TypeError::New(env, "Please check your config!").Value());
+      return;
+    }
+
+    auto external = Napi::External<SherpaOnnxOfflineSpeakerDiarization>::New(
+        env, const_cast<SherpaOnnxOfflineSpeakerDiarization *>(sd_),
+        [](Napi::Env env, SherpaOnnxOfflineSpeakerDiarization *sd) {
+          SherpaOnnxDestroyOfflineSpeakerDiarization(sd);
+        });
+
+    deferred_.Resolve(external);
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  SherpaOnnxOfflineSpeakerDiarizationConfig config_;
+  const SherpaOnnxOfflineSpeakerDiarization *sd_ = nullptr;
+#if __OHOS__
+  NativeResourceManager *mgr_ = nullptr;
+#endif
+};
+
+static Napi::Value CreateOfflineSpeakerDiarizationAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+#if __OHOS__
+  if (info.Length() != 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#else
+  if (info.Length() != 1) {
+    std::ostringstream os;
+    os << "Expect only 1 argument. Given: " << info.Length();
+
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+#endif
+
+  if (!info[0].IsObject()) {
+    Napi::TypeError::New(env, "Expect an object as the argument")
+        .ThrowAsJavaScriptException();
+
+    return env.Null();
+  }
+
+  Napi::Object o = info[0].As<Napi::Object>();
+  SherpaOnnxOfflineSpeakerDiarizationConfig c = ParseDiarizationConfig(o);
+
+#if __OHOS__
+  NativeResourceManager *mgr =
+      OH_ResourceManager_InitNativeResourceManager(env, info[1]);
+
+  CreateOfflineSpeakerDiarizationWorker *worker =
+      new CreateOfflineSpeakerDiarizationWorker(env, c, mgr);
+#else
+  CreateOfflineSpeakerDiarizationWorker *worker =
+      new CreateOfflineSpeakerDiarizationWorker(env, c);
+#endif
+  worker->Queue();
+
+  return worker->Promise();
 }
 
 static Napi::Number OfflineSpeakerDiarizationGetSampleRateWrapper(
@@ -478,6 +603,10 @@ static void OfflineSpeakerDiarizationSetConfigWrapper(
 void InitNonStreamingSpeakerDiarization(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "createOfflineSpeakerDiarization"),
               Napi::Function::New(env, CreateOfflineSpeakerDiarizationWrapper));
+
+  exports.Set(
+      Napi::String::New(env, "createOfflineSpeakerDiarizationAsync"),
+      Napi::Function::New(env, CreateOfflineSpeakerDiarizationAsyncWrapper));
 
   exports.Set(
       Napi::String::New(env, "getOfflineSpeakerDiarizationSampleRate"),

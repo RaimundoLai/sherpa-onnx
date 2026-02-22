@@ -1,10 +1,28 @@
 import {
   createOfflineTts,
+  createOfflineTtsAsync,
   getOfflineTtsNumSpeakers,
   getOfflineTtsSampleRate,
   offlineTtsGenerate,
   offlineTtsGenerateAsync,
+  offlineTtsExtractMiocodecEmbeddings,
+  offlineTtsExtractMiocodecEmbeddingsAsync,
+  offlineTtsGenerateWithMiocodecEmbeddings,
+  offlineTtsGenerateWithMiocodecEmbeddingsAsync,
 } from 'libsherpa_onnx.so';
+
+export class MiocodecEmbeddings {
+  public speakerEmbedding: Float32Array = new Float32Array(0);
+  public globalEmbedding: Float32Array = new Float32Array(0);
+}
+
+export class TtsInputWithEmbeddings {
+    public text: string = '';
+    public speakerEmbedding: Float32Array = new Float32Array(0);
+    public globalEmbedding: Float32Array = new Float32Array(0);
+    public speed: number = 1.0;
+    public lang: string = '';
+}
 
 export class OfflineTtsVitsModelConfig {
   public model: string = '';
@@ -88,12 +106,23 @@ export class OfflineTts {
   public sampleRate: number;
   private handle: object;
 
-  constructor(config: OfflineTtsConfig, mgr?: object) {
-    this.handle = createOfflineTts(config, mgr);
-    this.config = config;
-
+  constructor(configOrHandle: OfflineTtsConfig | object, mgr?: object) {
+    if (configOrHandle instanceof OfflineTtsConfig) {
+      this.handle = createOfflineTts(configOrHandle, mgr);
+      this.config = configOrHandle;
+    } else {
+      this.handle = configOrHandle;
+      this.config = new OfflineTtsConfig();
+    }
     this.numSpeakers = getOfflineTtsNumSpeakers(this.handle);
     this.sampleRate = getOfflineTtsSampleRate(this.handle);
+  }
+
+  static async createAsync(config: OfflineTtsConfig, mgr?: object): Promise<OfflineTts> {
+    const handle: object = await createOfflineTtsAsync(config, mgr);
+    const tts = new OfflineTts(handle);
+    tts.config = config;
+    return tts;
   }
 
   /*
@@ -108,5 +137,21 @@ export class OfflineTts {
 
   generateAsync(input: TtsInput): Promise<TtsOutput> {
     return offlineTtsGenerateAsync(this.handle, input);
+  }
+
+  extractMiocodecEmbeddings(audioDir: string): MiocodecEmbeddings {
+    return offlineTtsExtractMiocodecEmbeddings(this.handle, audioDir) as MiocodecEmbeddings;
+  }
+
+  extractMiocodecEmbeddingsAsync(audioDir: string): Promise<MiocodecEmbeddings> {
+    return offlineTtsExtractMiocodecEmbeddingsAsync(this.handle, audioDir);
+  }
+
+  generateWithMiocodecEmbeddings(input: TtsInputWithEmbeddings): TtsOutput {
+    return offlineTtsGenerateWithMiocodecEmbeddings(this.handle, input) as TtsOutput;
+  }
+
+  generateWithMiocodecEmbeddingsAsync(input: TtsInputWithEmbeddings): Promise<TtsOutput> {
+    return offlineTtsGenerateWithMiocodecEmbeddingsAsync(this.handle, input);
   }
 }

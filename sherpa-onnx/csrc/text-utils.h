@@ -120,6 +120,7 @@ template <typename T>
 bool ConvertStringToReal(const std::string &str, T *out);
 
 std::vector<std::string> SplitUtf8(const std::string &text);
+std::vector<std::string> SplitUtf8ForPhones(const std::string &text);
 
 std::string ToLowerCase(const std::string &s);
 void ToLowerCase(std::string *in_out);

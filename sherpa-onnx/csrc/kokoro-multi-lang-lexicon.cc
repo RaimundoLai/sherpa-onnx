@@ -129,7 +129,7 @@ class KokoroMultiLangLexicon::Impl {
 
     std::string current_text;
     bool in_bracket = false;
-    std::vector<std::string> phonemes = SplitUtf8(text);
+    std::vector<std::string> phonemes = SplitUtf8ForPhones(text);
     int32_t max_len = meta_data_.max_token_len;
 
     if (debug_) {
@@ -238,7 +238,7 @@ class KokoroMultiLangLexicon::Impl {
     std::vector<std::pair<std::string, std::string>> replace_str_pairs = {
         {"，", ","}, {":", ","},  {"、", ","}, {"；", ";"},   {"：", ","},
         {"。", "."}, {"？", "?"}, {"！", "!"}, {"“", "\""}, {"”", "\""},
-        {"—", ","},  {"…", "."},  {"\\s+", " "},
+        {"—", ","},  {"…", "."},  {"[\\r\\n\\t]+", " "},
     };
     for (const auto &p : replace_str_pairs) {
       std::regex re(p.first);
@@ -256,7 +256,8 @@ class KokoroMultiLangLexicon::Impl {
     std::string expr_japanese = "([\\u3040-\\u309F\\u30A0-\\u30FF\\u4E00-\\u9FFF]+)";
     std::string expr_korean = "([\\uAC00-\\uD7A3\\u1100-\\u11FF]+)";
     std::string expr_not_cjk = "([^\\u4e00-\\u9fff\\u3040-\\u309F\\u30A0-\\u30FF\\uAC00-\\uD7A3\\u1100-\\u11FF\\[\\]]+)";
-    std::string expr_bracket = "\\[(.*?)\\]";
+    // Support any number of inner brackets on the same level, without catastrophic backtracking
+    std::string expr_bracket = "\\[[^\\[\\]]*(?:\\[[^\\]]*\\][^\\[\\]]*)*\\]";
 
     std::string expr_all = expr_bracket + "|" + expr_chinese + "|" + expr_japanese + "|" + expr_korean + "|" + expr_not_cjk;
 
@@ -471,7 +472,13 @@ class KokoroMultiLangLexicon::Impl {
 
     this_sentence.push_back(0);
 	  PhraseMatcher matcher(&all_words_, words, debug_);
+    bool is_first = true;
     for (const auto &w : matcher) {
+      if (!is_first) {
+        this_sentence.push_back(16);
+      }
+      is_first = false;
+
       if(voice == "yue") {
         std::vector<int32_t> ids;
         ProcessWithG2p(w, &ids, voice);

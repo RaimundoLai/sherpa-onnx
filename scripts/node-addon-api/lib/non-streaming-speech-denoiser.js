@@ -1,12 +1,18 @@
 const addon = require('./addon.js');
 
 class OfflineSpeechDenoiser {
-  constructor(config) {
-    this.handle = addon.createOfflineSpeechDenoiser(config);
-    this.config = config;
+  constructor(handle) {
+    this.handle = handle;
+    this.sampleRate = addon.offlineSpeechDenoiserGetSampleRateWrapper(this.handle);
+  }
 
-    this.sampleRate =
-        addon.offlineSpeechDenoiserGetSampleRateWrapper(this.handle);
+  static async createAsync(config) {
+    const handle = await addon.createOfflineSpeechDenoiserAsync(config);
+    return new OfflineSpeechDenoiser(handle);
+  }
+  static create(config) {
+    const handle = addon.createOfflineSpeechDenoiser(config);
+    return new OfflineSpeechDenoiser(handle);
   }
 
   /*

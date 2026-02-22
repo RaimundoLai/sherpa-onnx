@@ -1,5 +1,6 @@
 import {
   createOfflineSpeakerDiarization,
+  createOfflineSpeakerDiarizationAsync,
   getOfflineSpeakerDiarizationSampleRate,
   offlineSpeakerDiarizationProcess,
   offlineSpeakerDiarizationProcessAsync,
@@ -46,11 +47,22 @@ export class OfflineSpeakerDiarization {
   public sampleRate: number;
   private handle: object;
 
-  constructor(config: OfflineSpeakerDiarizationConfig, mgr?: object) {
-    this.handle = createOfflineSpeakerDiarization(config, mgr);
-    this.config = config;
-
+  constructor(configOrHandle: OfflineSpeakerDiarizationConfig | object, mgr?: object) {
+    if (configOrHandle instanceof OfflineSpeakerDiarizationConfig) {
+      this.handle = createOfflineSpeakerDiarization(configOrHandle, mgr);
+      this.config = configOrHandle;
+    } else {
+      this.handle = configOrHandle;
+      this.config = new OfflineSpeakerDiarizationConfig();
+    }
     this.sampleRate = getOfflineSpeakerDiarizationSampleRate(this.handle);
+  }
+
+  static async createAsync(config: OfflineSpeakerDiarizationConfig, mgr?: object): Promise<OfflineSpeakerDiarization> {
+    const handle: object = await createOfflineSpeakerDiarizationAsync(config, mgr);
+    const sd = new OfflineSpeakerDiarization(handle);
+    sd.config = config;
+    return sd;
   }
 
   /**

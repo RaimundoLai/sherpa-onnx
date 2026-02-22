@@ -46,8 +46,19 @@ export type TtsOutput = {
   sampleRate: number;
 };
 
+export type MiocodecEmbeddings = {
+  speakerEmbedding: Float32Array;
+  globalEmbedding: Float32Array;
+};
+
 export const offlineTtsGenerate: (handle: object, input: object) => TtsOutput;
 export const offlineTtsGenerateAsync: (handle: object, input: object) => Promise<TtsOutput>;
+
+export const offlineTtsExtractMiocodecEmbeddings: (handle: object, audioDir: string) => MiocodecEmbeddings;
+export const offlineTtsExtractMiocodecEmbeddingsAsync: (handle: object, audioDir: string) => Promise<MiocodecEmbeddings>;
+
+export const offlineTtsGenerateWithMiocodecEmbeddings: (handle: object, input: object) => TtsOutput;
+export const offlineTtsGenerateWithMiocodecEmbeddingsAsync: (handle: object, input: object) => Promise<TtsOutput>;
 
 export const createSpeakerEmbeddingExtractor: (config: object, mgr?: object) => object;
 export const speakerEmbeddingExtractorDim: (handle: object) => number;

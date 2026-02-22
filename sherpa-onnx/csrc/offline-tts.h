@@ -130,6 +130,26 @@ class OfflineTts {
   // If it supports only a single speaker, then it return 0 or 1.
   int32_t NumSpeakers() const;
 
+  struct MiocodecLlamaEmbeddings {
+    std::vector<float> speaker_embedding;
+    std::vector<float> global_embedding;
+  };
+
+  MiocodecLlamaEmbeddings ExtractMiocodecLlamaEmbeddings(
+      const std::string &audio_dir) const;
+
+  GeneratedAudio GenerateWithMiocodecLlamaEmbeddings(
+      const std::string &text, const std::vector<float> &speaker_embedding,
+      const std::vector<float> &global_embedding, float speed = 1.0f,
+      const std::string &lang = "en-us",
+      GeneratedAudioCallback callback = nullptr) const;
+
+  GeneratedAudio ConvertVoiceWithMiocodecLlamaEmbeddings(
+      const std::string &source_audio,
+      const std::vector<float> &global_embedding,
+      float speed = 1.0f,
+      GeneratedAudioCallback callback = nullptr) const;
+
  private:
   std::unique_ptr<OfflineTtsImpl> impl_;
 };

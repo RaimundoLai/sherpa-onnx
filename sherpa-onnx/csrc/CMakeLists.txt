@@ -205,6 +205,8 @@ if(SHERPA_ONNX_ENABLE_TTS)
     offline-tts-kokoro-model.cc
     offline-tts-matcha-model-config.cc
     offline-tts-matcha-model.cc
+    offline-tts-miocodec-llama-model-config.cc
+    offline-tts-miocodec-llama-model.cc
     offline-tts-model-config.cc
     offline-tts-vits-model-config.cc
     offline-tts-vits-model.cc

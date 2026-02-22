@@ -1,5 +1,6 @@
 import {
   createSpeakerEmbeddingExtractor,
+  createSpeakerEmbeddingExtractorAsync,
   createSpeakerEmbeddingManager,
   speakerEmbeddingExtractorComputeEmbedding,
   speakerEmbeddingExtractorCreateStream,
@@ -28,10 +29,23 @@ export class SpeakerEmbeddingExtractor {
   public dim: number;
   private handle: object;
 
-  constructor(config: SpeakerEmbeddingExtractorConfig, mgr?: object) {
-    this.handle = createSpeakerEmbeddingExtractor(config, mgr);
-    this.config = config;
+  constructor(configOrHandle: SpeakerEmbeddingExtractorConfig | object, mgr?: object) {
+    if (configOrHandle instanceof SpeakerEmbeddingExtractorConfig) {
+      this.handle = createSpeakerEmbeddingExtractor(configOrHandle, mgr);
+      this.config = configOrHandle;
+    } else {
+      this.handle = configOrHandle;
+    }
     this.dim = speakerEmbeddingExtractorDim(this.handle);
+  }
+
+  static create(config: SpeakerEmbeddingExtractorConfig, mgr?: object): SpeakerEmbeddingExtractor {
+    return new SpeakerEmbeddingExtractor(config, mgr);
+  }
+
+  static async createAsync(config: SpeakerEmbeddingExtractorConfig, mgr?: object): Promise<SpeakerEmbeddingExtractor> {
+    const handle: object = await createSpeakerEmbeddingExtractorAsync(config, mgr);
+    return new SpeakerEmbeddingExtractor(handle);
   }
 
   createStream(): OnlineStream {

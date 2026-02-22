@@ -1,12 +1,15 @@
 const addon = require('./addon.js');
 
 class OfflineTts {
-  constructor(config) {
-    this.handle = addon.createOfflineTts(config);
-    this.config = config;
-
+  constructor(handle) {
+    this.handle = handle;
     this.numSpeakers = addon.getOfflineTtsNumSpeakers(this.handle);
     this.sampleRate = addon.getOfflineTtsSampleRate(this.handle);
+  }
+
+  static async createAsync(config) {
+    const handle = await addon.createOfflineTtsAsync(config);
+    return new OfflineTts(handle);
   }
 
   /*
@@ -24,6 +27,30 @@ class OfflineTts {
       const result = addon.offlineTtsGenerateAsync(this.handle, obj);
       resolve(result);
     });
+  }
+
+  extractMiocodecEmbeddings(audioDir) {
+    return addon.offlineTtsExtractMiocodecEmbeddings(this.handle, audioDir);
+  }
+
+  extractMiocodecEmbeddingsAsync(audioDir) {
+    return addon.offlineTtsExtractMiocodecEmbeddingsAsync(this.handle, audioDir);
+  }
+
+  generateWithMiocodecEmbeddings(obj) {
+    return addon.offlineTtsGenerateWithMiocodecEmbeddings(this.handle, obj);
+  }
+
+  generateWithMiocodecEmbeddingsAsync(obj) {
+    return addon.offlineTtsGenerateWithMiocodecEmbeddingsAsync(this.handle, obj);
+  }
+
+  convertVoiceWithMiocodecEmbeddings(obj) {
+    return addon.offlineTtsConvertVoiceWithMiocodecEmbeddings(this.handle, obj);
+  }
+
+  convertVoiceWithMiocodecEmbeddingsAsync(obj) {
+    return addon.offlineTtsConvertVoiceWithMiocodecEmbeddingsAsync(this.handle, obj);
   }
 }
 

@@ -11,6 +11,7 @@
 #include "sherpa-onnx/csrc/offline-tts-kokoro-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-chatterbox-model-config.h"
+#include "sherpa-onnx/csrc/offline-tts-miocodec-llama-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-zipvoice-model-config.h"
 #include "sherpa-onnx/csrc/parse-options.h"
@@ -24,6 +25,7 @@ struct OfflineTtsModelConfig {
   OfflineTtsZipvoiceModelConfig zipvoice;
   OfflineTtsKittenModelConfig kitten;
   OfflineTtsChatterboxModelConfig chatterbox;
+  OfflineTtsMiocodecLlamaModelConfig miocodec_llama;
 
   int32_t num_threads = 1;
   bool debug = false;
@@ -37,6 +39,7 @@ struct OfflineTtsModelConfig {
                         const OfflineTtsZipvoiceModelConfig &zipvoice,
                         const OfflineTtsKittenModelConfig &kitten,
                         const OfflineTtsChatterboxModelConfig &chatterbox,
+                        const OfflineTtsMiocodecLlamaModelConfig &miocodec_llama,
                         int32_t num_threads, bool debug,
                         const std::string &provider)
       : vits(vits),
@@ -45,6 +48,7 @@ struct OfflineTtsModelConfig {
         zipvoice(zipvoice),
         kitten(kitten),
         chatterbox(chatterbox),
+        miocodec_llama(miocodec_llama),
         num_threads(num_threads),
         debug(debug),
         provider(provider) {}
