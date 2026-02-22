@@ -5,7 +5,24 @@ import {
   getOfflineTtsSampleRate,
   offlineTtsGenerate,
   offlineTtsGenerateAsync,
+  offlineTtsExtractMiocodecEmbeddings,
+  offlineTtsExtractMiocodecEmbeddingsAsync,
+  offlineTtsGenerateWithMiocodecEmbeddings,
+  offlineTtsGenerateWithMiocodecEmbeddingsAsync,
 } from 'libsherpa_onnx.so';
+
+export class MiocodecEmbeddings {
+  public speakerEmbedding: Float32Array = new Float32Array(0);
+  public globalEmbedding: Float32Array = new Float32Array(0);
+}
+
+export class TtsInputWithEmbeddings {
+    public text: string = '';
+    public speakerEmbedding: Float32Array = new Float32Array(0);
+    public globalEmbedding: Float32Array = new Float32Array(0);
+    public speed: number = 1.0;
+    public lang: string = '';
+}
 
 export class OfflineTtsVitsModelConfig {
   public model: string = '';
@@ -120,5 +137,21 @@ export class OfflineTts {
 
   generateAsync(input: TtsInput): Promise<TtsOutput> {
     return offlineTtsGenerateAsync(this.handle, input);
+  }
+
+  extractMiocodecEmbeddings(audioDir: string): MiocodecEmbeddings {
+    return offlineTtsExtractMiocodecEmbeddings(this.handle, audioDir) as MiocodecEmbeddings;
+  }
+
+  extractMiocodecEmbeddingsAsync(audioDir: string): Promise<MiocodecEmbeddings> {
+    return offlineTtsExtractMiocodecEmbeddingsAsync(this.handle, audioDir);
+  }
+
+  generateWithMiocodecEmbeddings(input: TtsInputWithEmbeddings): TtsOutput {
+    return offlineTtsGenerateWithMiocodecEmbeddings(this.handle, input) as TtsOutput;
+  }
+
+  generateWithMiocodecEmbeddingsAsync(input: TtsInputWithEmbeddings): Promise<TtsOutput> {
+    return offlineTtsGenerateWithMiocodecEmbeddingsAsync(this.handle, input);
   }
 }

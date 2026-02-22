@@ -21,6 +21,7 @@
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/offline-tts-impl.h"
+#include "sherpa-onnx/csrc/offline-tts-miocodec-llama-impl.h"
 #include "sherpa-onnx/csrc/text-utils.h"
 
 namespace sherpa_onnx {
@@ -258,14 +259,48 @@ GeneratedAudio OfflineTts::Generate(
       printed = true;
     }
     return impl_->Generate(utf8_text, audio_dir, speed, lang, exaggeration, std::move(callback));
-  } else {
-    SHERPA_ONNX_LOGE(
-        "Non UTF8 encoded string is received. You would not get expected "
-        "results!");
     return impl_->Generate(text, audio_dir, speed, lang, exaggeration, std::move(callback));
   }
 #endif
 }
+
+OfflineTts::MiocodecLlamaEmbeddings OfflineTts::ExtractMiocodecLlamaEmbeddings(
+    const std::string &audio_dir) const {
+  const auto *impl =
+      static_cast<const OfflineTtsMiocodecLlamaImpl *>(impl_.get());
+
+  auto ans = impl->ExtractEmbeddings(audio_dir);
+
+  MiocodecLlamaEmbeddings out;
+  out.speaker_embedding = std::move(ans.speaker_embedding);
+  out.global_embedding = std::move(ans.global_embedding);
+
+  return out;
+}
+
+GeneratedAudio OfflineTts::GenerateWithMiocodecLlamaEmbeddings(
+    const std::string &text, const std::vector<float> &speaker_embedding,
+    const std::vector<float> &global_embedding, float speed /*= 1.0f*/,
+    const std::string &lang /*= "en-us"*/,
+    GeneratedAudioCallback callback /*= nullptr*/) const {
+  const auto *impl =
+      static_cast<const OfflineTtsMiocodecLlamaImpl *>(impl_.get());
+
+  return impl->GenerateWithEmbeddings(text, speaker_embedding, global_embedding,
+                                      speed, lang, callback);
+}
+
+GeneratedAudio OfflineTts::ConvertVoiceWithMiocodecLlamaEmbeddings(
+    const std::string &source_audio,
+    const std::vector<float> &global_embedding, float speed /*= 1.0f*/,
+    GeneratedAudioCallback callback /*= nullptr*/) const {
+  const auto *impl =
+      static_cast<const OfflineTtsMiocodecLlamaImpl *>(impl_.get());
+
+  return impl->ConvertVoiceWithEmbeddings(source_audio, global_embedding,
+                                          speed, callback);
+}
+
 int32_t OfflineTts::SampleRate() const { return impl_->SampleRate(); }
 
 int32_t OfflineTts::NumSpeakers() const { return impl_->NumSpeakers(); }

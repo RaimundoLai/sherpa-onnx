@@ -15,6 +15,7 @@ void OfflineTtsModelConfig::Register(ParseOptions *po) {
   zipvoice.Register(po);
   kitten.Register(po);
   chatterbox.Register(po);
+  miocodec_llama.Register(po);
 
   po->Register("num-threads", &num_threads,
                "Number of threads to run the neural network");
@@ -56,6 +57,10 @@ bool OfflineTtsModelConfig::Validate() const {
     return chatterbox.Validate();
   }
 
+  if (!miocodec_llama.model.empty()) {
+    return miocodec_llama.Validate();
+  }
+
   SHERPA_ONNX_LOGE("Please provide exactly one tts model.");
 
   return false;
@@ -71,6 +76,7 @@ std::string OfflineTtsModelConfig::ToString() const {
   os << "zipvoice=" << zipvoice.ToString() << ", ";
   os << "kitten=" << kitten.ToString() << ", ";
   os << "chatterbox=" << chatterbox.ToString() << ", ";
+  os << "miocodec_llama=" << miocodec_llama.ToString() << ", ";
   os << "num_threads=" << num_threads << ", ";
   os << "debug=" << (debug ? "True" : "False") << ", ";
   os << "provider=\"" << provider << "\")";

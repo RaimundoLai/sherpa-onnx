@@ -28,6 +28,30 @@ class OfflineTts {
       resolve(result);
     });
   }
+
+  extractMiocodecEmbeddings(audioDir) {
+    return addon.offlineTtsExtractMiocodecEmbeddings(this.handle, audioDir);
+  }
+
+  extractMiocodecEmbeddingsAsync(audioDir) {
+    return addon.offlineTtsExtractMiocodecEmbeddingsAsync(this.handle, audioDir);
+  }
+
+  generateWithMiocodecEmbeddings(obj) {
+    return addon.offlineTtsGenerateWithMiocodecEmbeddings(this.handle, obj);
+  }
+
+  generateWithMiocodecEmbeddingsAsync(obj) {
+    return addon.offlineTtsGenerateWithMiocodecEmbeddingsAsync(this.handle, obj);
+  }
+
+  convertVoiceWithMiocodecEmbeddings(obj) {
+    return addon.offlineTtsConvertVoiceWithMiocodecEmbeddings(this.handle, obj);
+  }
+
+  convertVoiceWithMiocodecEmbeddingsAsync(obj) {
+    return addon.offlineTtsConvertVoiceWithMiocodecEmbeddingsAsync(this.handle, obj);
+  }
 }
 
 module.exports = {

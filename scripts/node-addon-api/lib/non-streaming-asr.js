@@ -29,7 +29,10 @@ class OfflineRecognizer {
     const handle = await addon.createOfflineRecognizerAsync(config);
     return new OfflineRecognizer(handle);
   }
-
+  static create(config) {
+    const handle = addon.createOfflineRecognizer(config);
+    return new OfflineRecognizer(handle);
+  }
   createStream() {
     const handle = addon.createOfflineStream(this.handle);
     return new OfflineStream(handle);

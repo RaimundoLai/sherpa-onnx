@@ -12,7 +12,12 @@ class OfflineSpeakerDiarization {
     sd.config = config;
     return sd;
   }
-
+  static create(config) {
+    const handle = addon.createOfflineSpeakerDiarization(config);
+    const sd = new OfflineSpeakerDiarization(handle);
+    sd.config = config;
+    return sd;
+  }
   /**
    * samples is a 1-d float32 array. Each element of the array should be
    * in the range [-1, 1].

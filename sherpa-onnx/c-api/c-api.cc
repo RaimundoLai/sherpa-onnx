@@ -1266,6 +1266,34 @@ static sherpa_onnx::OfflineTtsConfig GetOfflineTtsConfig(
       SHERPA_ONNX_OR(config->model.chatterbox.cangjie_dict, "");
   tts_config.model.chatterbox.perth_watermarker =
       SHERPA_ONNX_OR(config->model.chatterbox.perth_watermarker, "");
+
+  // miocodec_llama
+  tts_config.model.miocodec_llama.model =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.model, "");
+  tts_config.model.miocodec_llama.campplus_model =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.campplus_model, "");
+  tts_config.model.miocodec_llama.miocodec_encoder =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.miocodec_encoder, "");
+  tts_config.model.miocodec_llama.miocodec_decoder =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.miocodec_decoder, "");
+  tts_config.model.miocodec_llama.embeddings =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.embeddings, "");
+  tts_config.model.miocodec_llama.tokens =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.tokens, "");
+  tts_config.model.miocodec_llama.lexicon =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.lexicon, "");
+  tts_config.model.miocodec_llama.g2p_model =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.g2p_model, "");
+  tts_config.model.miocodec_llama.temperature =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.temperature, 0.7f);
+  tts_config.model.miocodec_llama.top_p =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.top_p, 0.85f);
+  tts_config.model.miocodec_llama.max_tokens =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.max_tokens, 500);
+  tts_config.model.miocodec_llama.repetition_penalty =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.repetition_penalty, 1.0f);
+  tts_config.model.miocodec_llama.perth_watermarker =
+      SHERPA_ONNX_OR(config->model.miocodec_llama.perth_watermarker, "");
   tts_config.model.num_threads = SHERPA_ONNX_OR(config->model.num_threads, 1);
   tts_config.model.debug = config->model.debug;
   tts_config.model.provider = SHERPA_ONNX_OR(config->model.provider, "cpu");
@@ -1320,23 +1348,28 @@ int32_t SherpaOnnxOfflineTtsNumSpeakers(const SherpaOnnxOfflineTts *tts) {
 static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed, bool g2p, const char *lang, 
     std::function<int32_t(const float *, int32_t, float)> callback) {
-  sherpa_onnx::GeneratedAudio audio =
-      tts->impl->Generate(text, sid, speed, g2p, lang, callback);
+  try {
+    sherpa_onnx::GeneratedAudio audio =
+        tts->impl->Generate(text, sid, speed, g2p, lang, callback);
 
-  if (audio.samples.empty()) {
+    if (audio.samples.empty()) {
+      return nullptr;
+    }
+
+    SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
+
+    float *samples = new float[audio.samples.size()];
+    std::copy(audio.samples.begin(), audio.samples.end(), samples);
+
+    ans->samples = samples;
+    ans->n = audio.samples.size();
+    ans->sample_rate = audio.sample_rate;
+
+    return ans;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Caught exception in OfflineTtsGenerate: %s", e.what());
     return nullptr;
   }
-
-  SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
-
-  float *samples = new float[audio.samples.size()];
-  std::copy(audio.samples.begin(), audio.samples.end(), samples);
-
-  ans->samples = samples;
-  ans->n = audio.samples.size();
-  ans->sample_rate = audio.sample_rate;
-
-  return ans;
 }
 
 const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
@@ -1399,8 +1432,167 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithChatterbox(
                                  float progress) {
         return callback(samples, n, progress, arg);
     };
+  try {
+    sherpa_onnx::GeneratedAudio audio =
+        tts->impl->Generate(text, audio_dir, speed, lang, exaggeration, wrapper);
+
+    if (audio.samples.empty()) {
+      return nullptr;
+    }
+
+    SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
+
+    float *samples = new float[audio.samples.size()];
+    std::copy(audio.samples.begin(), audio.samples.end(), samples);
+
+    ans->samples = samples;
+    ans->n = audio.samples.size();
+    ans->sample_rate = audio.sample_rate;
+
+    return ans;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Caught exception in OfflineTtsGenerate: %s", e.what());
+    return nullptr;
+  }
+}
+
+const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithMiocodecLlama(
+    const SherpaOnnxOfflineTts *tts, 
+    const char *text, 
+    const char *audio_dir,
+    float speed, 
+    const char *lang,
+    SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
+  
+  auto wrapper = [callback, arg](const float *samples, int32_t n,
+                                 float progress) -> int32_t {
+    if (callback) {
+      return callback(samples, n, progress, arg);
+    }
+    return 1;
+  };
+  
+  sherpa_onnx::GeneratedAudioCallback cb = nullptr;
+  if (callback) {
+      cb = wrapper;
+  }
+
+  try {
+    sherpa_onnx::GeneratedAudio audio =
+        tts->impl->Generate(text, audio_dir, speed, lang, 1.0f, cb);
+
+    if (audio.samples.empty()) {
+      return nullptr;
+    }
+
+    SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
+
+    float *samples = new float[audio.samples.size()];
+    std::copy(audio.samples.begin(), audio.samples.end(), samples);
+
+    ans->samples = samples;
+    ans->n = audio.samples.size();
+    ans->sample_rate = audio.sample_rate;
+
+    return ans;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Caught exception in OfflineTtsGenerate: %s", e.what());
+    return nullptr;
+  }
+}
+
+const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *
+SherpaOnnxOfflineTtsMiocodecLlamaExtractEmbeddings(
+    const SherpaOnnxOfflineTts *tts, 
+    const char *audio_dir) {
+  auto embeddings = tts->impl->ExtractMiocodecLlamaEmbeddings(audio_dir);
+  if (embeddings.speaker_embedding.empty() || embeddings.global_embedding.empty()) {
+    return nullptr;
+  }
+
+  auto *ans = new SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings;
+  
+  ans->speaker_embedding_dim = static_cast<int32_t>(embeddings.speaker_embedding.size());
+  ans->speaker_embedding = new float[ans->speaker_embedding_dim];
+  std::copy(embeddings.speaker_embedding.begin(), embeddings.speaker_embedding.end(), ans->speaker_embedding);
+
+  ans->global_embedding_dim = static_cast<int32_t>(embeddings.global_embedding.size());
+  ans->global_embedding = new float[ans->global_embedding_dim];
+  std::copy(embeddings.global_embedding.begin(), embeddings.global_embedding.end(), ans->global_embedding);
+
+  return ans;
+}
+
+void SherpaOnnxDestroyOfflineTtsMiocodecLlamaEmbeddings(
+    const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *p) {
+  if (p) {
+    if (p->speaker_embedding) delete[] p->speaker_embedding;
+    if (p->global_embedding) delete[] p->global_embedding;
+    delete p;
+  }
+}
+
+const SherpaOnnxGeneratedAudio *
+SherpaOnnxOfflineTtsGenerateWithMiocodecLlamaEmbeddings(
+     const SherpaOnnxOfflineTts *tts, 
+     const char *text, 
+     const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *embeddings,
+     float speed, 
+     const char *lang,
+     SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
+  std::vector<float> spk_emb(
+      embeddings->speaker_embedding,
+      embeddings->speaker_embedding + embeddings->speaker_embedding_dim);
+  std::vector<float> global_emb(
+      embeddings->global_embedding,
+      embeddings->global_embedding + embeddings->global_embedding_dim);
+
+  auto wrapper = [callback, arg](const float *samples, int32_t n,
+                                 float progress) {
+    if (callback) return callback(samples, n, progress, arg);
+    return 1;
+  };
+  
   sherpa_onnx::GeneratedAudio audio =
-      tts->impl->Generate(text, audio_dir, speed, lang, exaggeration, wrapper);
+      tts->impl->GenerateWithMiocodecLlamaEmbeddings(
+          text, spk_emb, global_emb, speed, lang, wrapper);
+
+  if (audio.samples.empty()) {
+    return nullptr;
+  }
+
+  SherpaOnnxGeneratedAudio *ans = new SherpaOnnxGeneratedAudio;
+
+  float *samples = new float[audio.samples.size()];
+  std::copy(audio.samples.begin(), audio.samples.end(), samples);
+
+  ans->samples = samples;
+  ans->n = audio.samples.size();
+  ans->sample_rate = audio.sample_rate;
+
+  return ans;
+}
+
+const SherpaOnnxGeneratedAudio *
+SherpaOnnxOfflineTtsMiocodecLlamaConvertVoiceWithEmbeddings(
+     const SherpaOnnxOfflineTts *tts, 
+     const char *source_audio, 
+     const SherpaOnnxOfflineTtsMiocodecLlamaEmbeddings *embeddings,
+     float speed, 
+     SherpaOnnxGeneratedAudioProgressCallbackWithArg callback, void *arg) {
+  std::vector<float> global_emb(
+      embeddings->global_embedding,
+      embeddings->global_embedding + embeddings->global_embedding_dim);
+
+  auto wrapper = [callback, arg](const float *samples, int32_t n,
+                                 float progress) {
+    if (callback) return callback(samples, n, progress, arg);
+    return 1; // Assuming 1 means continue
+  };
+  
+  sherpa_onnx::GeneratedAudio audio =
+      tts->impl->ConvertVoiceWithMiocodecLlamaEmbeddings(
+          source_audio ? source_audio : "", global_emb, speed, wrapper);
 
   if (audio.samples.empty()) {
     return nullptr;

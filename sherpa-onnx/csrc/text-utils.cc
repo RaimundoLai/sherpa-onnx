@@ -354,6 +354,117 @@ static std::vector<std::string> MergeCharactersIntoWords(
   return ans;
 }
 
+static std::vector<std::string> MergeCharactersIntoWordsForPhones(
+    const std::vector<std::string> &words) {
+  std::vector<std::string> ans;
+
+  int32_t n = static_cast<int32_t>(words.size());
+  int32_t i = 0;
+  int32_t prev = -1;
+  int32_t space_count = 0;
+
+  while (i < n) {
+    const auto &w = words[i];
+    
+    bool is_space = (w.size() == 1 && std::isspace(static_cast<uint8_t>(w[0])));
+    
+    if (is_space) {
+        if (prev != -1) {
+          std::string t;
+          for (; prev < i; ++prev) {
+            t.append(words[prev]);
+          }
+          ans.push_back(std::move(t));
+          prev = -1;
+        }
+        space_count++;
+        ++i;
+        continue;
+    } else {
+        if (space_count >= 2) {
+            ans.push_back(" ");
+        }
+        space_count = 0;
+    }
+
+    if (w.size() >= 3 || (w.size() == 2 && !IsSpecial(w)) ||
+        (w.size() == 1 && IsPunct(w[0]))) {
+      if (prev != -1) {
+        std::string t;
+        for (; prev < i; ++prev) {
+          t.append(words[prev]);
+        }
+        prev = -1;
+        ans.push_back(std::move(t));
+      }
+
+      ans.push_back(w);
+      ++i;
+      continue;
+    }
+
+    // e.g., öffnen
+    if (w.size() == 1 || (w.size() == 2 && IsSpecial(w))) {
+      if (prev == -1) {
+        prev = i;
+      }
+      ++i;
+      continue;
+    }
+
+    SHERPA_ONNX_LOGE("Ignore %s", w.c_str());
+    ++i;
+  }
+
+  if (prev != -1) {
+    std::string t;
+    for (; prev < i; ++prev) {
+      t.append(words[prev]);
+    }
+    ans.push_back(std::move(t));
+  }
+  
+  if (space_count >= 2) {
+      ans.push_back(" ");
+  }
+
+  return ans;
+}
+
+std::vector<std::string> SplitUtf8ForPhones(const std::string &text) {
+  const uint8_t *begin = reinterpret_cast<const uint8_t *>(text.c_str());
+  const uint8_t *end = begin + text.size();
+
+  std::vector<std::string> ans;
+
+  auto start = begin;
+  while (start < end) {
+    uint8_t c = *start;
+    uint8_t i = 0x80;
+    int32_t num_bytes = 0;
+
+    for (; c & i; i >>= 1) {
+      ++num_bytes;
+    }
+
+    if (num_bytes == 0) {
+      // this is an ascii
+      ans.emplace_back(reinterpret_cast<const char *>(start), 1);
+      ++start;
+    } else if (2 <= num_bytes && num_bytes <= 4) {
+      ans.emplace_back(reinterpret_cast<const char *>(start), num_bytes);
+      start += num_bytes;
+    } else {
+      SHERPA_ONNX_LOGE("Invalid byte at position: %d",
+                       static_cast<int32_t>(start - begin));
+      // skip this byte
+      ++start;
+    }
+  }
+
+  return MergeCharactersIntoWordsForPhones(ans);
+}
+
 std::vector<std::string> SplitUtf8(const std::string &text) {
   const uint8_t *begin = reinterpret_cast<const uint8_t *>(text.c_str());
   const uint8_t *end = begin + text.size();

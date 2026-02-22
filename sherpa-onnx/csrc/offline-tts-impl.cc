@@ -20,6 +20,7 @@
 #include "sherpa-onnx/csrc/offline-tts-kitten-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-kokoro-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-impl.h"
+#include "sherpa-onnx/csrc/offline-tts-miocodec-llama-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-impl.h"
 #include "sherpa-onnx/csrc/offline-tts-zipvoice-impl.h"
 
@@ -52,6 +53,8 @@ std::unique_ptr<OfflineTtsImpl> OfflineTtsImpl::Create(
     return std::make_unique<OfflineTtsKittenImpl>(config);
   } else if (!config.model.chatterbox.speech_encoder.empty()) {
     return std::make_unique<OfflineTtsChatterboxImpl>(config);
+  } else if (!config.model.miocodec_llama.model.empty()) {
+    return std::make_unique<OfflineTtsMiocodecLlamaImpl>(config);
   }
 
   SHERPA_ONNX_LOGE("Please provide a tts model.");
@@ -76,6 +79,8 @@ std::unique_ptr<OfflineTtsImpl> OfflineTtsImpl::Create(
   } else if (!config.model.chatterbox.speech_encoder.empty()) {
     // TODO(fangjun): support loading from asset manager
     return std::make_unique<OfflineTtsChatterboxImpl>(config);
+  } else if (!config.model.miocodec_llama.model.empty()) {
+    return std::make_unique<OfflineTtsMiocodecLlamaImpl>(config);
   }
 
   SHERPA_ONNX_LOGE("Please provide a tts model.");
