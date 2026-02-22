@@ -98,6 +98,96 @@ jobs:
           path: artifacts/sherpa-onnx-node-cuda.tar.gz
 
   # =================================================================================================
+  # Windows CUDA Build (ONNX Runtime 1.24.2, CUDA 13)
+  # =================================================================================================
+  npm-addon-win-x64-cuda13-1-24-2:
+    runs-on: windows-2022
+    steps:
+      - name: Clone sherpa-onnx repository
+        uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          ref: dev
+
+      - name: Setup Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download ONNX Runtime 1.24.2 GPU CUDA 13
+        shell: bash
+        run: |
+          curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-gpu_cuda13-1.24.2.zip
+          unzip -q onnxruntime-win-x64-gpu_cuda13-1.24.2.zip
+          rm onnxruntime-win-x64-gpu_cuda13-1.24.2.zip
+
+      - name: Build sherpa-onnx (CUDA 13)
+        shell: bash
+        run: |
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-gpu-1.24.2/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-gpu-1.24.2/include
+          
+          mkdir build
+          cd build
+          cmake \
+            -Wno-dev \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=./install \
+            -DBUILD_SHARED_LIBS=ON \
+            -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+            -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+            -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            -DSHERPA_ONNX_ENABLE_GPU=ON \
+            ..
+
+          cmake --build . --config Release --target install -- -m:6
+          
+          echo "----------"
+          ls -lh install/lib
+          echo "---------- Copying ONNX Runtime DLLs ----------"
+          cp -v ../onnxruntime-win-x64-gpu-1.24.2/lib/*.lib ./install/lib/
+          cp -v ../onnxruntime-win-x64-gpu-1.24.2/lib/*.dll ./install/lib/
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          # Set env vars again for cmake-js to pick up
+          export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-win-x64-gpu-1.24.2/lib
+          export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-win-x64-gpu-1.24.2/include
+          
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+
+          cd scripts/node-addon-api/
+          npm i
+          ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p bin
+          mkdir -p artifacts
+          
+          # Copy .node file
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          
+          # Copy dependencies (DLLs)
+          cp -fv build/install/lib/*.dll bin/
+          
+          # Tarball
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-node-cuda13.tar.gz ./* && cd ..
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-node-cuda13.tar.gz
+          path: artifacts/sherpa-onnx-node-cuda13.tar.gz
+
+  # =================================================================================================
   # Windows CPU Build
   # =================================================================================================
   npm-addon-win-x64:
@@ -371,6 +461,107 @@ jobs:
           path: artifacts/sherpa-onnx-linux-x64-cuda.tar.gz
 
   # =================================================================================================
+  # Linux CUDA Build (ONNX Runtime 1.24.2, CUDA 13)
+  # =================================================================================================
+  npm-addon-linux-x64-cuda13-1-24-2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: RaimundoLai/sherpa-onnx
+          ref: dev
+
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build sherpa-onnx
+        uses: addnab/docker-run-action@v3
+        with:
+            image: quay.io/pypa/manylinux_2_28_x86_64
+            options: |
+              --volume ${{ github.workspace }}/:/home/runner/work/sherpa-onnx/sherpa-onnx
+            shell: bash
+            run: |
+              uname -a
+              gcc --version
+              cmake --version
+              cd /home/runner/work/sherpa-onnx/sherpa-onnx
+
+              # Install Rust for tokenizers_cpp
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source $HOME/.cargo/env
+
+              # Download ONNX Runtime GPU CUDA 13
+              curl -SL -O https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-x64-gpu_cuda13-1.24.2.tgz
+              tar xzf onnxruntime-linux-x64-gpu_cuda13-1.24.2.tgz
+
+              export SHERPA_ONNXRUNTIME_LIB_DIR=$PWD/onnxruntime-linux-x64-gpu-1.24.2/lib
+              export SHERPA_ONNXRUNTIME_INCLUDE_DIR=$PWD/onnxruntime-linux-x64-gpu-1.24.2/include
+
+              ls -lh $SHERPA_ONNXRUNTIME_LIB_DIR/libonnxruntime.so
+
+              mkdir build
+              cd build
+
+              cmake \
+                -DCMAKE_INSTALL_PREFIX=./install \
+                -DBUILD_SHARED_LIBS=ON \
+                -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
+                -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
+                -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+                -DSHERPA_ONNX_ENABLE_GPU=ON \
+                ..
+
+              make -j2
+              make install
+
+              echo "---------- Copying ONNX Runtime GPU libs ----------"
+              cp -v ../onnxruntime-linux-x64-gpu-1.24.2/lib/*.so* ./install/lib/
+
+              ls -lh install/lib
+
+      - name: Build sherpa-onnx node-addon
+        shell: bash
+        run: |
+          d=$PWD
+          export SHERPA_ONNX_INSTALL_DIR=$d/build/install
+
+          sudo mkdir /shared
+          sudo ln -s $PWD/build /shared/
+
+          ls -lh /shared/build
+
+          cd scripts/node-addon-api/
+
+          npm i
+
+          ./node_modules/.bin/cmake-js compile --log-level verbose
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p bin
+          mkdir -p artifacts
+          
+          # Fix permissions from Docker
+          sudo chown -R $USER:$USER .
+          
+          # Copy compiled node addon
+          cp scripts/node-addon-api/build/Release/sherpa-onnx.node bin/
+          
+          # Copy shared libraries (.so) including ONNX Runtime GPU libs
+          cp -fv build/install/lib/lib*.so* bin/
+          
+          # Tarball
+          cd bin && tar -czvf ../artifacts/sherpa-onnx-linux-x64-cuda13.tar.gz ./* && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-linux-x64-cuda13.tar.gz
+          path: artifacts/sherpa-onnx-linux-x64-cuda13.tar.gz
+
+  # =================================================================================================
   # macOS Build (Intel & ARM64)
   # =================================================================================================
   npm-addon-macos:
@@ -475,7 +666,7 @@ jobs:
   # Release
   # =================================================================================================
   create-update-release:
-    needs: [npm-addon-win-x64, npm-addon-win-x64-cuda, npm-addon-linux-x64, npm-addon-linux-x64-cuda, npm-addon-macos]
+    needs: [npm-addon-win-x64, npm-addon-win-x64-cuda, npm-addon-win-x64-cuda13-1-24-2, npm-addon-linux-x64, npm-addon-linux-x64-cuda, npm-addon-linux-x64-cuda13-1-24-2, npm-addon-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -502,10 +693,12 @@ jobs:
              **Windows**
              - Windows (x64)
              - Windows (x64 with CUDA 12.x / ORT 1.22.1)
+             - Windows (x64 with CUDA 13.x / ORT 1.24.2)
              
              **Linux**
              - Linux (x64, Manylinux2_28)
              - Linux (x64 with CUDA 12.x / ORT 1.22.0)
+             - Linux (x64 with CUDA 13.x / ORT 1.24.2)
              
              **macOS**
              - macOS (Intel x64)
@@ -530,10 +723,12 @@ jobs:
             **Windows**
             - Windows (x64)
             - Windows (x64 with CUDA 12.x / ORT 1.22.1)
+            - Windows (x64 with CUDA 13.x / ORT 1.24.2)
             
             **Linux**
             - Linux (x64, Manylinux2_28)
             - Linux (x64 with CUDA 12.x / ORT 1.22.0)
+            - Linux (x64 with CUDA 13.x / ORT 1.24.2)
             
             **macOS**
             - macOS (Intel x64)
