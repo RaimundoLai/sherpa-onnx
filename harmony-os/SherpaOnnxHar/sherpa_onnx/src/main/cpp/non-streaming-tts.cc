@@ -570,7 +570,7 @@ static Napi::Object OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
   }
 
   if (!audio) {
-    return env.Null();
+    return {};
   }
   if (enable_external_buffer) {
     Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
