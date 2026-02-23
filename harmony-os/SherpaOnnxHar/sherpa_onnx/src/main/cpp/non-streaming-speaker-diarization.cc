@@ -404,7 +404,7 @@ struct SpeakerDiarizationCallbackData {
 // see
 // https://github.com/nodejs/node-addon-examples/blob/main/src/6-threadsafe-function/typed_threadsafe_function/node-addon-api/clock.cc
 static void InvokeJsCallback(Napi::Env env, Napi::Function callback,
-                             Napi::Reference<Napi::Value> *context,
+                             std::nullptr_t * /*context*/,
                              SpeakerDiarizationCallbackData *data) {
   if (env != nullptr) {
     if (callback != nullptr) {
@@ -413,13 +413,13 @@ static void InvokeJsCallback(Napi::Env env, Napi::Function callback,
       Napi::Number num_total_chunks =
           Napi::Number::New(env, data->num_total_chunks);
 
-      callback.Call(context->Value(), {num_processed_chunks, num_total_chunks});
+      callback.Call({num_processed_chunks, num_total_chunks});
     }
   }
   delete data;
 }
 
-using TSFN = Napi::TypedThreadSafeFunction<Napi::Reference<Napi::Value>,
+using TSFN = Napi::TypedThreadSafeFunction<std::nullptr_t,
                                            SpeakerDiarizationCallbackData,
                                            InvokeJsCallback>;
 
@@ -446,7 +446,10 @@ class SpeakerDiarizationProcessWorker : public Napi::AsyncWorker {
       data->num_processed_chunks = num_processed_chunks;
       data->num_total_chunks = num_total_chunks;
 
-      _this->tsfn_.NonBlockingCall(data);
+      napi_status status = _this->tsfn_.NonBlockingCall(data);
+      if (status != napi_ok) {
+        delete data;
+      }
 
       return 0;
     };
@@ -532,17 +535,13 @@ static Napi::Object OfflineSpeakerDiarizationProcessAsyncWrapper(
 
   Napi::Function cb = info[2].As<Napi::Function>();
 
-  auto context =
-      new Napi::Reference<Napi::Value>(Napi::Persistent(info.This()));
-
   TSFN tsfn = TSFN::New(
       env,
       cb,  // JavaScript function called asynchronously
       "SpeakerDiarizationProcessAsyncFunc",  // Name
       0,                                     // Unlimited queue
-      1,  // Only one thread will use this initially
-      context,
-      [](Napi::Env, void *, Napi::Reference<Napi::Value> *ctx) { delete ctx; });
+      1                                      // Only one thread will use this initially
+  );
 
   Napi::Float32Array samples = info[1].As<Napi::Float32Array>();
 

@@ -13,10 +13,7 @@ class OfflineStream {
   }
 
   acceptWaveformAsync(obj) {
-    return new Promise((resolve, reject) => {
-      const result = addon.acceptWaveformOfflineAsync(this.handle, obj)
-      resolve(result);
-    });
+    return addon.acceptWaveformOfflineAsync(this.handle, obj);
   }
 }
 
@@ -47,10 +44,7 @@ class OfflineRecognizer {
   }
 
   decodeAsync(stream) {
-    return new Promise((resolve, reject) => {
-      const result = addon.decodeOfflineStreamAsync(this.handle, stream.handle);
-      resolve(result);
-    });
+    return addon.decodeOfflineStreamAsync(this.handle, stream.handle);
   }
 
   getResult(stream) {

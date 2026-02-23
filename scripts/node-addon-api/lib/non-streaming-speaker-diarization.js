@@ -37,10 +37,10 @@ class OfflineSpeakerDiarization {
   }
 
   processAsync(samples, callable) {
-    return new Promise((resolve, reject) => {
-      const result = addon.offlineSpeakerDiarizationProcessAsync(this.handle, samples, callable);
-      resolve(result);
-    });
+    if (typeof callable !== 'function') {
+      callable = () => {};
+    }
+    return addon.offlineSpeakerDiarizationProcessAsync(this.handle, samples, callable);
   }
   setConfig(config) {
     addon.offlineSpeakerDiarizationSetConfig(this.handle, config);
