@@ -464,20 +464,18 @@ static Napi::Number OfflineTtsNumSpeakersWrapper(
 }
 
 // synchronous version
-static Napi::Object OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
+static Napi::Value OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() != 2) {
-    std::ostringstream os;
-    os << "Expect only 2 arguments. Given: " << info.Length();
-
-    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "Expected 2 arguments")
+        .ThrowAsJavaScriptException();
 
     return {};
   }
 
   if (!info[0].IsExternal()) {
-    Napi::TypeError::New(env, "Argument 0 should be an offline tts pointer.")
+    Napi::TypeError::New(env, "Argument 0 should be an offline tts pointer")
         .ThrowAsJavaScriptException();
 
     return {};
@@ -570,7 +568,7 @@ static Napi::Object OfflineTtsGenerateWrapper(const Napi::CallbackInfo &info) {
   }
 
   if (!audio) {
-    return env.Null();
+    return {};
   }
   if (enable_external_buffer) {
     Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
@@ -615,7 +613,7 @@ struct TtsCallbackData {
 // see
 // https://github.com/nodejs/node-addon-examples/blob/main/src/6-threadsafe-function/typed_threadsafe_function/node-addon-api/clock.cc
 static void InvokeJsCallback(Napi::Env env, Napi::Function callback,
-                             Napi::Reference<Napi::Value> *context,
+                             std::nullptr_t * /*context*/,
                              TtsCallbackData *data) {
   if (env != nullptr) {
     if (callback != nullptr) {
@@ -632,7 +630,7 @@ static void InvokeJsCallback(Napi::Env env, Napi::Function callback,
       arg.Set(Napi::String::New(env, "samples"), float32Array);
       arg.Set(Napi::String::New(env, "progress"), data->progress);
 
-      auto v = callback.Call(context->Value(), {arg});
+      auto v = callback.Call({arg});
       data->processed = true;
       if (v.IsNumber() && v.As<Napi::Number>().Int32Value()) {
         data->cancelled = false;
@@ -643,7 +641,7 @@ static void InvokeJsCallback(Napi::Env env, Napi::Function callback,
   }
 }
 
-using TSFN = Napi::TypedThreadSafeFunction<Napi::Reference<Napi::Value>,
+using TSFN = Napi::TypedThreadSafeFunction<std::nullptr_t,
                                            TtsCallbackData, InvokeJsCallback>;
 
 class TtsGenerateWorker : public Napi::AsyncWorker {
@@ -694,7 +692,12 @@ class TtsGenerateWorker : public Napi::AsyncWorker {
       data->progress = progress;
       _this->data_list_.push_back(data);
 
-      _this->tsfn_.NonBlockingCall(data);
+      napi_status status = _this->tsfn_.NonBlockingCall(data);
+      if (status != napi_ok) {
+        // If it fails to push to the queue, it means it will not be executed by JS thread,
+        // but it will still be deleted in ~TtsGenerateWorker.
+        // We do nothing special here.
+      }
 
       return 1;
     };
@@ -877,17 +880,13 @@ static Napi::Object OfflineTtsGenerateAsyncWrapper(
     exaggeration = obj.Get("exaggeration").As<Napi::Number>().FloatValue();
   }
   
-  auto context =
-      new Napi::Reference<Napi::Value>(Napi::Persistent(info.This()));
-
   TSFN tsfn = TSFN::New(
       env,
       cb,                 // JavaScript function called asynchronously
       "TtsGenerateFunc",  // Name
       0,                  // Unlimited queue
-      1,                  // Only one thread will use this initially
-      context,
-      [](Napi::Env, void *, Napi::Reference<Napi::Value> *ctx) { delete ctx; });
+      1                   // Only one thread will use this initially
+  );
 
   TtsGenerateWorker *worker = new TtsGenerateWorker(
       env, tsfn, tts, text, speed, sid, enable_external_buffer, g2p, lang, audio_dir, type, exaggeration);

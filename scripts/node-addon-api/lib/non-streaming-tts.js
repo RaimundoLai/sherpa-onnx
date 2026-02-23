@@ -23,10 +23,7 @@ class OfflineTts {
   }
 
   generateAsync(obj) {
-    return new Promise((resolve, reject) => {
-      const result = addon.offlineTtsGenerateAsync(this.handle, obj);
-      resolve(result);
-    });
+    return addon.offlineTtsGenerateAsync(this.handle, obj);
   }
 
   extractMiocodecEmbeddings(audioDir) {
