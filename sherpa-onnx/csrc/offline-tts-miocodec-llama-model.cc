@@ -787,8 +787,8 @@ class OfflineTtsMiocodecLlamaModel::Impl {
 
     // Mel filter bank boundaries
     const float kMelLow = 0.0f;
-    const float kMelHigh = 2595.0f * std::log10f(1.0f + sample_rate / 2.0f / 700.0f);
-    auto hz2mel = [](float hz) { return 2595.0f * std::log10f(1.0f + hz / 700.0f); };
+    const float kMelHigh = 2595.0f * std::log10(1.0f + sample_rate / 2.0f / 700.0f);
+    auto hz2mel = [](float hz) { return 2595.0f * std::log10(1.0f + hz / 700.0f); };
     auto mel2hz = [](float mel) { return 700.0f * (std::pow(10.0f, mel / 2595.0f) - 1.0f); };
 
     int32_t fft_len = 512;
