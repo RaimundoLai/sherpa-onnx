@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import os
 
 onnx_model_path = "g2p_t5_model.onnx"
-model_name = "charsiu/g2p_multilingual_byT5_tiny_16_layers_100"
+model_name = "fdemelo/g2p-multilingual-byt5-tiny-8l-ipa-childes"
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -49,6 +49,12 @@ try:
         dynamic_axes=dynamic_axes
     )
     print(f"PyTorch 模型已成功轉換為 ONNX 並保存至 {onnx_model_path}")
+    model_proto = onnx.load(onnx_model_path)
 
+    onnx.save_model(
+        model_proto, 
+        onnx_model_path, 
+        save_as_external_data=False 
+    )
 except Exception as e:
     print(f"ONNX 轉換失敗: {e}")
