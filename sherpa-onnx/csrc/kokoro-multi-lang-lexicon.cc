@@ -230,9 +230,9 @@ class KokoroMultiLangLexicon::Impl {
   }
 
   std::vector<TokenIDs> ConvertTextToTokenIds(const std::string &_text, const std::string &_lang) const {
-    std::string text = ToLowerCase(_text);
+    std::string text = _text;
     if (debug_) {
-      SHERPA_ONNX_LOGE("After converting to lowercase:\n%s", text.c_str());
+      SHERPA_ONNX_LOGE("After NOT converting to lowercase:\n%s", text.c_str());
     }
 
     std::vector<std::pair<std::string, std::string>> replace_str_pairs = {
@@ -352,6 +352,52 @@ class KokoroMultiLangLexicon::Impl {
   }
 
  private:
+  std::vector<int32_t> GetLetterPhonemes(const std::string &letter) const {
+    std::unordered_map<std::string, std::string> letter2phones = {
+      {"A", "ɐ"},
+      {"B", "bˈi"},
+      {"C", "sˈi"},
+      {"D", "dˈi"},
+      {"E", "ˈi"},
+      {"F", "ˈɛf"},
+      {"G", "ʤˈi"},
+      {"H", "ˈAʧ"},
+      {"I", "ˈI"},
+      {"J", "ʤˈA"},
+      {"K", "kˈA"},
+      {"L", "ˈɛl"},
+      {"M", "ˈɛm"},
+      {"N", "ˈɛn"},
+      {"O", "ˈO"},
+      {"P", "pˈi"},
+      {"Q", "kjˈu"},
+      {"R", "ˈɑɹ"},
+      {"S", "ˈɛs"},
+      {"T", "tˈi"},
+      {"U", "jˈu"},
+      {"V", "vˈi"},
+      {"W", "dˈʌbᵊlju"},
+      {"X", "ˈɛks"},
+      {"Y", "wˈI"},
+      {"Z", "zˈi"}
+    };
+
+    std::vector<int32_t> ans;
+    std::string upper_letter = letter;
+    for (char &c : upper_letter) {
+      c = std::toupper(c);
+    }
+    if (letter2phones.count(upper_letter)) {
+      std::vector<std::string> phonemes = SplitUtf8(letter2phones.at(upper_letter));
+      for (const auto &p : phonemes) {
+        if (token2id_.count(p)) {
+          ans.push_back(token2id_.at(p));
+        }
+      }
+    }
+    return ans;
+  }
+
   bool IsPunctuation(const std::string &text) const {
     if (text == ";" || text == ":" || text == "," || text == "." ||
         text == "!" || text == "?" || text == "—" || text == "…" ||
@@ -365,8 +411,9 @@ class KokoroMultiLangLexicon::Impl {
 
   std::vector<int32_t> ConvertWordToIds(const std::string &w, const std::string &voice = "en-us") const {
     std::vector<int32_t> ans;
-    if (word2ids_.count(w)) {
-      ans = word2ids_.at(w);
+    std::string lower_w = ToLowerCase(w);
+    if (word2ids_.count(lower_w)) {
+      ans = word2ids_.at(lower_w);
       return ans;
     }
 
@@ -386,14 +433,16 @@ class KokoroMultiLangLexicon::Impl {
       }
       
       for (const auto &word : words) {
-        if (word2ids_.count(word)) {
-          auto ids = word2ids_.at(word);
+        std::string lower_word = ToLowerCase(word);
+        if (word2ids_.count(lower_word)) {
+          auto ids = word2ids_.at(lower_word);
           ans.insert(ans.end(), ids.begin(), ids.end());
         }  else if (has_cjk) {
           std::vector<std::string> chars = SplitUtf8(word);
           for (const auto &c : chars) {
-            if (word2ids_.count(c)) {
-              auto ids = word2ids_.at(c);
+            std::string lower_c = ToLowerCase(c);
+            if (word2ids_.count(lower_c)) {
+              auto ids = word2ids_.at(lower_c);
               ans.insert(ans.end(), ids.begin(), ids.end());
             } else {
               if (debug_) {
@@ -616,8 +665,8 @@ class KokoroMultiLangLexicon::Impl {
 
           this_sentence.push_back(0);
         }
-      } else if (word2ids_.count(word)) {
-        const auto &ids = word2ids_.at(word);
+      } else if (std::string lower_word = ToLowerCase(word); word2ids_.count(lower_word)) {
+        const auto &ids = word2ids_.at(lower_word);
         if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
           this_sentence.push_back(0);
           ans.push_back(std::move(this_sentence));
@@ -628,22 +677,49 @@ class KokoroMultiLangLexicon::Impl {
         this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
         this_sentence.push_back(space_id);
       } else {
-        if (debug_) {
-          SHERPA_ONNX_LOGE("Use espeak-ng to handle the OOV: '%s'",
-                           word.c_str());
+        std::vector<std::string> parts;
+        std::string current_part;
+        for (char c : word) {
+          if (std::isupper(static_cast<unsigned char>(c))) {
+            if (!current_part.empty()) {
+              parts.push_back(current_part);
+              current_part.clear();
+            }
+          }
+          current_part += c;
+        }
+        if (!current_part.empty()) {
+          parts.push_back(current_part);
         }
 
-        std::vector<int32_t> ids;
-        ProcessWithG2p(word, &ids, effective_voice);
+        for (const auto& part : parts) {
+          std::vector<int32_t> ids;
+          std::string lower_part = ToLowerCase(part);
+          
+          if (word2ids_.count(lower_part)) {
+            ids = word2ids_.at(lower_part);
+          } else if (part.length() == 1) {
+            ids = GetLetterPhonemes(part);
+            if (ids.empty()) {
+               ProcessWithG2p(part, &ids, effective_voice);
+            }
+          } else {
+            if (debug_) {
+              SHERPA_ONNX_LOGE("Use espeak-ng to handle the OOV: '%s'",
+                               part.c_str());
+            }
+            ProcessWithG2p(part, &ids, effective_voice);
+          }
 
-        if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
-          this_sentence.push_back(0);
-          ans.push_back(std::move(this_sentence));
+          if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
+            this_sentence.push_back(0);
+            ans.push_back(std::move(this_sentence));
 
-          this_sentence.push_back(0);
+            this_sentence.push_back(0);
+          }
+
+          this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
         }
-
-        this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
         this_sentence.push_back(space_id);
       }
     }
