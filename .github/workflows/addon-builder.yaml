@@ -624,6 +624,7 @@ jobs:
             -DSHERPA_ONNX_ENABLE_WEBSOCKET=OFF \
             -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
             -DSHERPA_ONNX_ENABLE_BINARY=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET='12.0' \
             -DCMAKE_OSX_ARCHITECTURES='${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}' \
             ..
           make -j4 install
@@ -640,7 +641,7 @@ jobs:
           export SHERPA_ONNX_INSTALL_DIR=$d/build/install
           cd scripts/node-addon-api/
           npm i
-          ./node_modules/.bin/cmake-js compile --log-level verbose
+          ./node_modules/.bin/cmake-js compile --log-level verbose --CDCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 
       - name: Package artifacts
         shell: bash
