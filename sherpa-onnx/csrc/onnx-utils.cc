@@ -18,6 +18,11 @@
 
 namespace sherpa_onnx {
 
+Ort::Env& GetOrtEnv() {
+  static Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "sherpa-onnx");
+  return env;
+}
+
 static std::string GetInputName(Ort::Session *sess, size_t index,
                                 OrtAllocator *allocator) {
 // Note(fangjun): We only tested 1.17.1 and 1.11.0
