@@ -26,7 +26,6 @@ class OfflineNemoEncDecCtcModel::Impl {
  public:
   explicit Impl(const OfflineModelConfig &config)
       : config_(config),
-        env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
     auto buf = ReadFile(config_.nemo_ctc.model);
@@ -36,7 +35,6 @@ class OfflineNemoEncDecCtcModel::Impl {
   template <typename Manager>
   Impl(Manager *mgr, const OfflineModelConfig &config)
       : config_(config),
-        env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
     auto buf = ReadFile(mgr, config_.nemo_ctc.model);
@@ -85,7 +83,7 @@ class OfflineNemoEncDecCtcModel::Impl {
 
  private:
   void Init(void *model_data, size_t model_data_length) {
-    sess_ = std::make_unique<Ort::Session>(env_, model_data, model_data_length,
+    sess_ = std::make_unique<Ort::Session>(GetOrtEnv(), model_data, model_data_length,
                                            sess_opts_);
 
     GetInputNames(sess_.get(), &input_names_, &input_names_ptr_);
@@ -114,7 +112,6 @@ class OfflineNemoEncDecCtcModel::Impl {
 
  private:
   OfflineModelConfig config_;
-  Ort::Env env_;
   Ort::SessionOptions sess_opts_;
   Ort::AllocatorWithDefaultOptions allocator_;
 

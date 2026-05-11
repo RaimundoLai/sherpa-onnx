@@ -9,6 +9,14 @@
 #include "napi.h"    // NOLINT
 #include "sherpa-onnx/c-api/c-api.h"
 
+struct OfflineRecognizerWrapper {
+  SherpaOnnxOfflineRecognizer *recognizer = nullptr;
+};
+
+struct OfflineStreamWrapper {
+  SherpaOnnxOfflineStream *stream = nullptr;
+};
+
 // defined in ./streaming-asr.cc
 SherpaOnnxFeatureConfig GetFeatureConfig(Napi::Object obj);
 SherpaOnnxHomophoneReplacerConfig GetHomophoneReplacerConfig(Napi::Object obj);
@@ -355,7 +363,7 @@ static void FreeConfig(const SherpaOnnxOfflineRecognizerConfig &c) {
   SHERPA_ONNX_DELETE_C_STR(c.hr.rule_fsts);
 }
 
-static Napi::External<SherpaOnnxOfflineRecognizer>
+static Napi::Value
 CreateOfflineRecognizerWrapper(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 #if __OHOS__
@@ -412,14 +420,20 @@ CreateOfflineRecognizerWrapper(const Napi::CallbackInfo &info) {
     return {};
   }
 
-  return Napi::External<SherpaOnnxOfflineRecognizer>::New(
-      env, const_cast<SherpaOnnxOfflineRecognizer *>(recognizer),
-      [](Napi::Env env, SherpaOnnxOfflineRecognizer *recognizer) {
-        SherpaOnnxDestroyOfflineRecognizer(recognizer);
+  auto wrapper = new OfflineRecognizerWrapper;
+  wrapper->recognizer = const_cast<SherpaOnnxOfflineRecognizer *>(recognizer);
+
+  return Napi::External<OfflineRecognizerWrapper>::New(
+      env, wrapper,
+      [](Napi::Env env, OfflineRecognizerWrapper *wrapper) {
+        if (wrapper->recognizer) {
+          SherpaOnnxDestroyOfflineRecognizer(wrapper->recognizer);
+        }
+        delete wrapper;
       });
 }
 
-static Napi::External<SherpaOnnxOfflineStream> CreateOfflineStreamWrapper(
+static Napi::Value CreateOfflineStreamWrapper(
     const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
   if (info.Length() != 1) {
@@ -440,16 +454,27 @@ static Napi::External<SherpaOnnxOfflineStream> CreateOfflineStreamWrapper(
     return {};
   }
 
-  const SherpaOnnxOfflineRecognizer *recognizer =
-      info[0].As<Napi::External<SherpaOnnxOfflineRecognizer>>().Data();
+  auto wrapper = info[0].As<Napi::External<OfflineRecognizerWrapper>>().Data();
+  const SherpaOnnxOfflineRecognizer *recognizer = wrapper->recognizer;
+  if (!recognizer) {
+    Napi::TypeError::New(env, "Recognizer has been freed")
+        .ThrowAsJavaScriptException();
+    return {};
+  }
 
   const SherpaOnnxOfflineStream *stream =
       SherpaOnnxCreateOfflineStream(recognizer);
 
-  return Napi::External<SherpaOnnxOfflineStream>::New(
-      env, const_cast<SherpaOnnxOfflineStream *>(stream),
-      [](Napi::Env env, SherpaOnnxOfflineStream *stream) {
-        SherpaOnnxDestroyOfflineStream(stream);
+  auto stream_wrapper = new OfflineStreamWrapper;
+  stream_wrapper->stream = const_cast<SherpaOnnxOfflineStream *>(stream);
+
+  return Napi::External<OfflineStreamWrapper>::New(
+      env, stream_wrapper,
+      [](Napi::Env env, OfflineStreamWrapper *stream_wrapper) {
+        if (stream_wrapper->stream) {
+          SherpaOnnxDestroyOfflineStream(stream_wrapper->stream);
+        }
+        delete stream_wrapper;
       });
 }
 
@@ -472,8 +497,14 @@ static void AcceptWaveformOfflineWrapper(const Napi::CallbackInfo &info) {
     return;
   }
 
-  const SherpaOnnxOfflineStream *stream =
-      info[0].As<Napi::External<SherpaOnnxOfflineStream>>().Data();
+  auto stream_wrapper =
+      info[0].As<Napi::External<OfflineStreamWrapper>>().Data();
+  const SherpaOnnxOfflineStream *stream = stream_wrapper->stream;
+  if (!stream) {
+    Napi::TypeError::New(env, "Stream has been freed")
+        .ThrowAsJavaScriptException();
+    return;
+  }
 
   if (!info[1].IsObject()) {
     Napi::TypeError::New(env, "Argument 1 should be an object")
@@ -556,8 +587,13 @@ static void OfflineRecognizerSetConfigWrapper(const Napi::CallbackInfo &info) {
   Napi::Object o = info[1].As<Napi::Object>();
   SherpaOnnxOfflineRecognizerConfig c = ParseConfig(o);
 
-  const SherpaOnnxOfflineRecognizer *recognizer =
-      info[0].As<Napi::External<SherpaOnnxOfflineRecognizer>>().Data();
+  auto wrapper = info[0].As<Napi::External<OfflineRecognizerWrapper>>().Data();
+  const SherpaOnnxOfflineRecognizer *recognizer = wrapper->recognizer;
+  if (!recognizer) {
+    Napi::TypeError::New(env, "Recognizer has been freed")
+        .ThrowAsJavaScriptException();
+    return;
+  }
 
   SherpaOnnxOfflineRecognizerSetConfig(recognizer, &c);
 
@@ -590,11 +626,19 @@ static void DecodeOfflineStreamWrapper(const Napi::CallbackInfo &info) {
     return;
   }
 
-  const SherpaOnnxOfflineRecognizer *recognizer =
-      info[0].As<Napi::External<SherpaOnnxOfflineRecognizer>>().Data();
+  auto rec_wrapper = info[0].As<Napi::External<OfflineRecognizerWrapper>>().Data();
+  const SherpaOnnxOfflineRecognizer *recognizer = rec_wrapper->recognizer;
+  if (!recognizer) {
+    Napi::TypeError::New(env, "Recognizer has been freed").ThrowAsJavaScriptException();
+    return;
+  }
 
-  const SherpaOnnxOfflineStream *stream =
-      info[1].As<Napi::External<SherpaOnnxOfflineStream>>().Data();
+  auto stream_wrapper = info[1].As<Napi::External<OfflineStreamWrapper>>().Data();
+  const SherpaOnnxOfflineStream *stream = stream_wrapper->stream;
+  if (!stream) {
+    Napi::TypeError::New(env, "Stream has been freed").ThrowAsJavaScriptException();
+    return;
+  }
 
   SherpaOnnxDecodeOfflineStream(recognizer, stream);
 }
@@ -618,8 +662,12 @@ static Napi::String GetOfflineStreamResultAsJsonWrapper(
     return {};
   }
 
-  const SherpaOnnxOfflineStream *stream =
-      info[0].As<Napi::External<SherpaOnnxOfflineStream>>().Data();
+  auto stream_wrapper = info[0].As<Napi::External<OfflineStreamWrapper>>().Data();
+  const SherpaOnnxOfflineStream *stream = stream_wrapper->stream;
+  if (!stream) {
+    Napi::TypeError::New(env, "Stream has been freed").ThrowAsJavaScriptException();
+    return {};
+  }
 
   const char *json = SherpaOnnxGetOfflineStreamResultAsJson(stream);
   Napi::String s = Napi::String::New(env, json);
@@ -679,8 +727,12 @@ static Napi::Value AcceptWaveformOfflineAsyncWrapper(
     return env.Null();
   }
 
-  const SherpaOnnxOfflineStream *stream =
-      info[0].As<Napi::External<SherpaOnnxOfflineStream>>().Data();
+  auto stream_wrapper = info[0].As<Napi::External<OfflineStreamWrapper>>().Data();
+  const SherpaOnnxOfflineStream *stream = stream_wrapper->stream;
+  if (!stream) {
+    Napi::TypeError::New(env, "Stream has been freed").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   if (!info[1].IsObject()) {
     Napi::TypeError::New(env, "Argument 1 should be an object")
@@ -792,11 +844,19 @@ static Napi::Value DecodeOfflineStreamAsyncWrapper(
     return env.Null();
   }
 
-  const SherpaOnnxOfflineRecognizer *recognizer =
-      info[0].As<Napi::External<SherpaOnnxOfflineRecognizer>>().Data();
+  auto rec_wrapper = info[0].As<Napi::External<OfflineRecognizerWrapper>>().Data();
+  const SherpaOnnxOfflineRecognizer *recognizer = rec_wrapper->recognizer;
+  if (!recognizer) {
+    Napi::TypeError::New(env, "Recognizer has been freed").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-  const SherpaOnnxOfflineStream *stream =
-      info[1].As<Napi::External<SherpaOnnxOfflineStream>>().Data();
+  auto stream_wrapper = info[1].As<Napi::External<OfflineStreamWrapper>>().Data();
+  const SherpaOnnxOfflineStream *stream = stream_wrapper->stream;
+  if (!stream) {
+    Napi::TypeError::New(env, "Stream has been freed").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   DecodeStreamWorker *worker =
       new DecodeStreamWorker(env, recognizer, stream);
@@ -850,10 +910,16 @@ class CreateOfflineRecognizerWorker : public Napi::AsyncWorker {
       return;
     }
 
-    auto external = Napi::External<SherpaOnnxOfflineRecognizer>::New(
-        env, const_cast<SherpaOnnxOfflineRecognizer *>(recognizer_),
-        [](Napi::Env env, SherpaOnnxOfflineRecognizer *recognizer) {
-          SherpaOnnxDestroyOfflineRecognizer(recognizer);
+    auto wrapper = new OfflineRecognizerWrapper;
+    wrapper->recognizer = const_cast<SherpaOnnxOfflineRecognizer *>(recognizer_);
+
+    auto external = Napi::External<OfflineRecognizerWrapper>::New(
+        env, wrapper,
+        [](Napi::Env env, OfflineRecognizerWrapper *wrapper) {
+          if (wrapper->recognizer) {
+            SherpaOnnxDestroyOfflineRecognizer(wrapper->recognizer);
+          }
+          delete wrapper;
         });
 
     deferred_.Resolve(external);
@@ -916,7 +982,35 @@ static Napi::Value CreateOfflineRecognizerAsyncWrapper(
   return worker->Promise();
 }
 
+static void FreeOfflineRecognizerWrapper(const Napi::CallbackInfo &info) {
+  if (info.Length() != 1 || !info[0].IsExternal()) {
+    return;
+  }
+  auto wrapper = info[0].As<Napi::External<OfflineRecognizerWrapper>>().Data();
+  if (wrapper && wrapper->recognizer) {
+    SherpaOnnxDestroyOfflineRecognizer(wrapper->recognizer);
+    wrapper->recognizer = nullptr;
+  }
+}
+
+static void FreeOfflineStreamWrapper(const Napi::CallbackInfo &info) {
+  if (info.Length() != 1 || !info[0].IsExternal()) {
+    return;
+  }
+  auto wrapper = info[0].As<Napi::External<OfflineStreamWrapper>>().Data();
+  if (wrapper && wrapper->stream) {
+    SherpaOnnxDestroyOfflineStream(wrapper->stream);
+    wrapper->stream = nullptr;
+  }
+}
+
 void InitNonStreamingAsr(Napi::Env env, Napi::Object exports) {
+  exports.Set(Napi::String::New(env, "freeOfflineRecognizer"),
+              Napi::Function::New(env, FreeOfflineRecognizerWrapper));
+  
+  exports.Set(Napi::String::New(env, "freeOfflineStream"),
+              Napi::Function::New(env, FreeOfflineStreamWrapper));
+
   exports.Set(Napi::String::New(env, "createOfflineRecognizer"),
               Napi::Function::New(env, CreateOfflineRecognizerWrapper));
 

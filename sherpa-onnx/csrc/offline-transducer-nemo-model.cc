@@ -31,7 +31,6 @@ class OfflineTransducerNeMoModel::Impl {
  public:
   explicit Impl(const OfflineModelConfig &config)
       : config_(config),
-        env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
     {
@@ -53,7 +52,6 @@ class OfflineTransducerNeMoModel::Impl {
   template <typename Manager>
   Impl(Manager *mgr, const OfflineModelConfig &config)
       : config_(config),
-        env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
     {
@@ -170,7 +168,7 @@ class OfflineTransducerNeMoModel::Impl {
  private:
   void InitEncoder(void *model_data, size_t model_data_length) {
     encoder_sess_ = std::make_unique<Ort::Session>(
-        env_, model_data, model_data_length, sess_opts_);
+        GetOrtEnv(), model_data, model_data_length, sess_opts_);
 
     GetInputNames(encoder_sess_.get(), &encoder_input_names_,
                   &encoder_input_names_ptr_);
@@ -219,7 +217,7 @@ class OfflineTransducerNeMoModel::Impl {
 
   void InitDecoder(void *model_data, size_t model_data_length) {
     decoder_sess_ = std::make_unique<Ort::Session>(
-        env_, model_data, model_data_length, sess_opts_);
+        GetOrtEnv(), model_data, model_data_length, sess_opts_);
 
     GetInputNames(decoder_sess_.get(), &decoder_input_names_,
                   &decoder_input_names_ptr_);
@@ -230,7 +228,7 @@ class OfflineTransducerNeMoModel::Impl {
 
   void InitJoiner(void *model_data, size_t model_data_length) {
     joiner_sess_ = std::make_unique<Ort::Session>(
-        env_, model_data, model_data_length, sess_opts_);
+        GetOrtEnv(), model_data, model_data_length, sess_opts_);
 
     GetInputNames(joiner_sess_.get(), &joiner_input_names_,
                   &joiner_input_names_ptr_);
@@ -261,7 +259,6 @@ class OfflineTransducerNeMoModel::Impl {
 
  private:
   OfflineModelConfig config_;
-  Ort::Env env_;
   Ort::SessionOptions sess_opts_;
   Ort::AllocatorWithDefaultOptions allocator_;
 

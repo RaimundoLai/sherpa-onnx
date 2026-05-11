@@ -42,8 +42,9 @@ Ort::SessionOptions GetSessionOptionsImpl(
 
   Ort::SessionOptions sess_opts;
   sess_opts.SetIntraOpNumThreads(num_threads);
-
   sess_opts.SetInterOpNumThreads(num_threads);
+  sess_opts.DisableMemPattern();
+  sess_opts.DisableCpuMemArena();
 
   std::vector<std::string> available_providers = Ort::GetAvailableProviders();
   std::ostringstream os;

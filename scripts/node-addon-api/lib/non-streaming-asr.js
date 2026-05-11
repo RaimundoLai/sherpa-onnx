@@ -15,6 +15,13 @@ class OfflineStream {
   acceptWaveformAsync(obj) {
     return addon.acceptWaveformOfflineAsync(this.handle, obj);
   }
+
+  free() {
+    if (this.handle) {
+      addon.freeOfflineStream(this.handle);
+      this.handle = null;
+    }
+  }
 }
 
 class OfflineRecognizer {
@@ -51,6 +58,13 @@ class OfflineRecognizer {
     const jsonStr = addon.getOfflineStreamResultAsJson(stream.handle);
 
     return JSON.parse(jsonStr);
+  }
+
+  free() {
+    if (this.handle) {
+      addon.freeOfflineRecognizer(this.handle);
+      this.handle = null;
+    }
   }
 }
 

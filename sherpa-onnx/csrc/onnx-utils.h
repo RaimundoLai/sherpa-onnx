@@ -22,6 +22,8 @@
 
 namespace sherpa_onnx {
 
+Ort::Env& GetOrtEnv();
+
 /**
  * Get the input names of a model.
  *

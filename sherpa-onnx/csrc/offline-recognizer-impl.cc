@@ -121,7 +121,7 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
     }
   }
 
-  Ort::Env env(ORT_LOGGING_LEVEL_ERROR);
+
 
   Ort::SessionOptions sess_opts;
   sess_opts.SetIntraOpNumThreads(1);
@@ -152,7 +152,7 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
   auto buf = ReadFile(model_filename);
 
   auto encoder_sess =
-      std::make_unique<Ort::Session>(env, buf.data(), buf.size(), sess_opts);
+      std::make_unique<Ort::Session>(GetOrtEnv(), buf.data(), buf.size(), sess_opts);
 
   Ort::ModelMetadata meta_data = encoder_sess->GetModelMetadata();
 
@@ -327,7 +327,7 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
     }
   }
 
-  Ort::Env env(ORT_LOGGING_LEVEL_ERROR);
+
 
   Ort::SessionOptions sess_opts;
   sess_opts.SetIntraOpNumThreads(1);
@@ -358,7 +358,7 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
   auto buf = ReadFile(mgr, model_filename);
 
   auto encoder_sess =
-      std::make_unique<Ort::Session>(env, buf.data(), buf.size(), sess_opts);
+      std::make_unique<Ort::Session>(GetOrtEnv(), buf.data(), buf.size(), sess_opts);
 
   Ort::ModelMetadata meta_data = encoder_sess->GetModelMetadata();
 
