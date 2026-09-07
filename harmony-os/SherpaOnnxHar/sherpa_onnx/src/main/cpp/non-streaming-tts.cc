@@ -957,7 +957,7 @@ class OfflineTtsMiocodecLlamaExtractEmbeddingsWorker : public Napi::AsyncWorker 
     if (emb_) {
       deferred_.Resolve(GetEmbeddingsObject(Env(), emb_));
     } else {
-       deferred_.Resolve(Env().Undefined());
+      deferred_.Reject(Napi::Error::New(Env(), "Failed to extract MioCodec embeddings from audio file").Value());
     }
   }
   
