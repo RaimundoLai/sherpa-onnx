@@ -30,6 +30,12 @@ namespace SherpaOnnx
             ZipformerCtc = new OfflineZipformerCtcModelConfig();
             Canary = new OfflineCanaryModelConfig();
             WenetCtc = new OfflineWenetCtcModelConfig();
+            Omnilingual = new OfflineOmnilingualAsrCtcModelConfig();
+            MedAsr = new OfflineMedAsrCtcModelConfig();
+            FunAsrNano = new OfflineFunAsrNanoModelConfig();
+            FireRedAsrCtc = new OfflineFireRedAsrCtcModelConfig();
+            Qwen3Asr = new OfflineQwen3AsrModelConfig();
+            CohereTranscribe = new OfflineCohereTranscribeModelConfig();
         }
         public OfflineTransducerModelConfig Transducer;
         public OfflineParaformerModelConfig Paraformer;
@@ -66,5 +72,11 @@ namespace SherpaOnnx
         public OfflineZipformerCtcModelConfig ZipformerCtc;
         public OfflineCanaryModelConfig Canary;
         public OfflineWenetCtcModelConfig WenetCtc;
+        public OfflineOmnilingualAsrCtcModelConfig Omnilingual;
+        public OfflineMedAsrCtcModelConfig MedAsr;
+        public OfflineFunAsrNanoModelConfig FunAsrNano;
+        public OfflineFireRedAsrCtcModelConfig FireRedAsrCtc;
+        public OfflineQwen3AsrModelConfig Qwen3Asr;
+        public OfflineCohereTranscribeModelConfig CohereTranscribe;
     }
 }

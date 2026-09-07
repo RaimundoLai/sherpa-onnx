@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - master
+      - test-node-addon
     paths:
       - '.github/workflows/test-nodejs-addon-api.yaml'
+      - '.github/scripts/test-nodejs-addon-npm.sh'
       - 'cmake/**'
       - 'sherpa-onnx/csrc/*'
       - 'sherpa-onnx/c-api/*'
       - 'scripts/node-addon-api/**'
+      - 'nodejs-addon-examples/**'
 
   workflow_dispatch:
 
@@ -78,7 +81,7 @@ jobs:
           key: ${{ matrix.os }}-release-shared
 
       - name: Build sherpa-onnx
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         shell: bash
         run: |
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -110,7 +113,7 @@ jobs:
           ls -lh install/lib
 
       - name: Build sherpa-onnx
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-2022'
         shell: bash
         run: |
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache

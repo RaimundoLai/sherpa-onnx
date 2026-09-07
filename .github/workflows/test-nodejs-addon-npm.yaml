@@ -6,12 +6,13 @@ on:
       - master
     paths:
       - '.github/workflows/test-nodejs-addon-npm.yaml'
+      - '.github/scripts/test-nodejs-addon-npm.sh'
       - 'cmake/**'
       - 'sherpa-onnx/csrc/*'
       - 'sherpa-onnx/c-api/*'
       - 'scripts/node-addon-api/**'
       - 'scripts/node-addon-api/*.js'
-      - 'nodejs-addon-examples/package.json'
+      - 'nodejs-addon-examples/**'
 
   workflow_dispatch:
 
@@ -29,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, macos-14, ubuntu-latest, ubuntu-22.04, windows-latest]
+        os: [macos-latest, macos-14, ubuntu-latest, ubuntu-22.04, windows-2022]
         node-version: ["16", "17", "18", "19", "21", "22"]
 
     steps:

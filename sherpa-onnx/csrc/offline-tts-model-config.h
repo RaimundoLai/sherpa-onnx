@@ -12,6 +12,8 @@
 #include "sherpa-onnx/csrc/offline-tts-matcha-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-chatterbox-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-miocodec-llama-model-config.h"
+#include "sherpa-onnx/csrc/offline-tts-pocket-model-config.h"
+#include "sherpa-onnx/csrc/offline-tts-supertonic-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-zipvoice-model-config.h"
 #include "sherpa-onnx/csrc/parse-options.h"
@@ -26,6 +28,8 @@ struct OfflineTtsModelConfig {
   OfflineTtsKittenModelConfig kitten;
   OfflineTtsChatterboxModelConfig chatterbox;
   OfflineTtsMiocodecLlamaModelConfig miocodec_llama;
+  OfflineTtsPocketModelConfig pocket;
+  OfflineTtsSupertonicModelConfig supertonic;
 
   int32_t num_threads = 1;
   bool debug = false;
@@ -40,6 +44,8 @@ struct OfflineTtsModelConfig {
                         const OfflineTtsKittenModelConfig &kitten,
                         const OfflineTtsChatterboxModelConfig &chatterbox,
                         const OfflineTtsMiocodecLlamaModelConfig &miocodec_llama,
+                        const OfflineTtsPocketModelConfig &pocket,
+                        const OfflineTtsSupertonicModelConfig &supertonic,
                         int32_t num_threads, bool debug,
                         const std::string &provider)
       : vits(vits),
@@ -49,6 +55,8 @@ struct OfflineTtsModelConfig {
         kitten(kitten),
         chatterbox(chatterbox),
         miocodec_llama(miocodec_llama),
+        pocket(pocket),
+        supertonic(supertonic),
         num_threads(num_threads),
         debug(debug),
         provider(provider) {}

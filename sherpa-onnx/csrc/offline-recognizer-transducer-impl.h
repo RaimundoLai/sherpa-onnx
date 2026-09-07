@@ -25,6 +25,7 @@
 #include "sherpa-onnx/csrc/offline-transducer-modified-beam-search-decoder.h"
 #include "sherpa-onnx/csrc/pad-sequence.h"
 #include "sherpa-onnx/csrc/symbol-table.h"
+#include "sherpa-onnx/csrc/text-utils.h"
 #include "sherpa-onnx/csrc/utils.h"
 #include "ssentencepiece/csrc/ssentencepiece.h"
 
@@ -59,6 +60,8 @@ static OfflineRecognitionResult Convert(
     text = sym_table.DecodeByteBpe(text);
   }
 
+  text = RemoveSpaceBetweenCjk(text);
+
   r.text = std::move(text);
 
   float frame_shift_s = frame_shift_ms / 1000. * subsampling_factor;
@@ -71,6 +74,9 @@ static OfflineRecognitionResult Convert(
   for (auto d : src.durations) {
     r.durations.push_back(d * frame_shift_s);
   }
+
+  // Copy token log probabilities (confidence scores)
+  r.ys_log_probs = src.ys_log_probs;
 
   return r;
 }
@@ -110,7 +116,7 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
     } else {
       SHERPA_ONNX_LOGE("Unsupported decoding method: %s",
                        config_.decoding_method.c_str());
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
   }
 
@@ -150,7 +156,7 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
     } else {
       SHERPA_ONNX_LOGE("Unsupported decoding method: %s",
                        config_.decoding_method.c_str());
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
   }
 
@@ -256,11 +262,11 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
   void InitHotwords() {
     // each line in hotwords_file contains space-separated words
 
-    std::ifstream is(config_.hotwords_file);
+    auto is = OpenInputFile(config_.hotwords_file);
     if (!is) {
       SHERPA_ONNX_LOGE("Open hotwords file failed: '%s'",
                        config_.hotwords_file.c_str());
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
 
     if (!EncodeHotwords(is, config_.model_config.modeling_unit, symbol_table_,
@@ -284,7 +290,7 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
     if (!is) {
       SHERPA_ONNX_LOGE("Open hotwords file failed: '%s'",
                        config_.hotwords_file.c_str());
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
 
     if (!EncodeHotwords(is, config_.model_config.modeling_unit, symbol_table_,

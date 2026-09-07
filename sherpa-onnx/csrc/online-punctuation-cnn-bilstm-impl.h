@@ -13,11 +13,6 @@
 #include <utility>
 #include <vector>
 
-#if __ANDROID_API__ >= 9
-#include "android/asset_manager.h"
-#include "android/asset_manager_jni.h"
-#endif
-
 #include <chrono>  // NOLINT
 
 #include "sherpa-onnx/csrc/file-utils.h"
@@ -39,13 +34,14 @@ class OnlinePunctuationCNNBiLSTMImpl : public OnlinePunctuationImpl {
   explicit OnlinePunctuationCNNBiLSTMImpl(const OnlinePunctuationConfig &config)
       : config_(config), model_(config.model) {
     if (!config_.model.bpe_vocab.empty()) {
-      bpe_encoder_ = std::make_unique<ssentencepiece::Ssentencepiece>(
-          config_.model.bpe_vocab);
+      auto buf = ReadFile(config_.model.bpe_vocab);
+      std::istringstream iss(std::string(buf.begin(), buf.end()));
+      bpe_encoder_ = std::make_unique<ssentencepiece::Ssentencepiece>(iss);
     }
   }
 
-#if __ANDROID_API__ >= 9
-  OnlinePunctuationCNNBiLSTMImpl(AAssetManager *mgr,
+  template <typename Manager>
+  OnlinePunctuationCNNBiLSTMImpl(Manager *mgr,
                                  const OnlinePunctuationConfig &config)
       : config_(config), model_(mgr, config.model) {
     if (!config_.model.bpe_vocab.empty()) {
@@ -54,7 +50,6 @@ class OnlinePunctuationCNNBiLSTMImpl : public OnlinePunctuationImpl {
       bpe_encoder_ = std::make_unique<ssentencepiece::Ssentencepiece>(iss);
     }
   }
-#endif
 
   std::string AddPunctuationWithCase(const std::string &text) const override {
     if (text.empty()) {

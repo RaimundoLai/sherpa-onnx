@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8"]
+        python-version: ["3.10"]
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
       - name: Install emsdk
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 3.1.51
+          version: 4.0.23
           actions-cache-folder: 'emsdk-cache'
 
       - name: View emsdk version
@@ -54,6 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Display node version
@@ -99,14 +100,10 @@ jobs:
 
       - name: Build nodejs package
         shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd scripts/nodejs
 
           git diff
 
-          npm install
-          npm ci
-          # see https://docs.npmjs.com/generating-provenance-statements
+          # https://docs.npmjs.com/trusted-publishers
           npm publish --provenance --access public

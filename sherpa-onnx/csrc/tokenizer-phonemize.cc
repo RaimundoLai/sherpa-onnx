@@ -144,6 +144,7 @@ public:
 
 private:
     std::string G2pInfer(const std::string& text, const std::string& lang) const {
+        bool is_single_word = text.find(' ') == std::string::npos;
         std::string full_text = "<" + lang + ">: " + text;
         std::vector<int32_t> encoded_ids = byT5_tokenizer_.encode(full_text);
         std::vector<int64_t> input_ids(encoded_ids.begin(), encoded_ids.end());
@@ -182,6 +183,27 @@ private:
                     break;
                 }
                 decoder_input_ids.push_back(next_token_id);
+
+                if (is_single_word) {
+                    bool repeated = false;
+                    for (int k = 1; k * 2 <= decoder_input_ids.size(); ++k) {
+                        bool match = true;
+                        for (int j = 0; j < k; ++j) {
+                            if (decoder_input_ids[decoder_input_ids.size() - k + j] !=
+                                decoder_input_ids[decoder_input_ids.size() - 2 * k + j]) {
+                                match = false;
+                                break;
+                            }
+                        }
+                        if (match) {
+                            repeated = true;
+                            break;
+                        }
+                    }
+                    if (repeated) {
+                        break;
+                    }
+                }
             } catch (const std::exception& e) {
                 SHERPA_ONNX_LOGE("G2P Infer: ONNX inference error at step %d: %s", i, e.what());
                 break;

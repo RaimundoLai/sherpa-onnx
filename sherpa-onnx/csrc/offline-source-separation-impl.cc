@@ -3,10 +3,12 @@
 // Copyright (c)  2025  Xiaomi Corporation
 
 #include "sherpa-onnx/csrc/offline-source-separation-impl.h"
+#include "sherpa-onnx/csrc/macros.h"
 
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #if __ANDROID_API__ >= 9
 #include "android/asset_manager.h"

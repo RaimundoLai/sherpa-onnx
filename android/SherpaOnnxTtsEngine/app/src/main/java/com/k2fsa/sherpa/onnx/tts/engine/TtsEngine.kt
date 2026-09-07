@@ -13,6 +13,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+const val MIN_TTS_SPEED = 0.1f
+const val MAX_TTS_SPEED = 5.0f
+
 object TtsEngine {
     var tts: OfflineTts? = null
 
@@ -25,6 +28,9 @@ object TtsEngine {
 
     // if a model supports two languages, set also lang2
     var lang2: String? = null
+
+    // for Supertonic TTS: language code in ISO 639-1 format, e.g., "en", "zh", "ja"
+    var supertonicLang: String = "en"
 
 
     val speedState: MutableState<Float> = mutableFloatStateOf(1.0F)
@@ -53,6 +59,14 @@ object TtsEngine {
     private var dataDir: String? = null
     private var assets: AssetManager? = null
     private var isKitten = false
+    var isSupertonic = false
+    private var durationPredictor: String? = null
+    private var textEncoder: String? = null
+    private var vectorEstimator: String? = null
+    private var supertonicVocoder: String? = null
+    private var ttsJson: String? = null
+    private var unicodeIndexer: String? = null
+    private var voiceStyle: String? = null
 
     init {
         // The purpose of such a design is to make the CI test easier
@@ -176,6 +190,30 @@ object TtsEngine {
         // dataDir = "kitten-nano-en-v0_1-fp16/espeak-ng-data"
         // lang = "eng"
         // isKitten = true
+
+        // Example 12
+        // matcha-icefall-zh-en
+        // https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/matcha-icefall-zh-en.html
+        // modelDir = "matcha-icefall-zh-en"
+        // acousticModelName = "model-steps-3.onnx"
+        // vocoder = "vocos-16khz-univ.onnx"
+        // dataDir = "matcha-icefall-zh-en/espeak-ng-data"
+        // lexicon = "lexicon.txt"
+        // lang = "zho"
+
+        // Example 13
+        // supertonic-3-tts (supports 31 languages, default: English)
+        // https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models
+        // modelDir = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
+        // isSupertonic = true
+        // durationPredictor = "duration_predictor.int8.onnx"
+        // textEncoder = "text_encoder.int8.onnx"
+        // vectorEstimator = "vector_estimator.int8.onnx"
+        // supertonicVocoder = "vocoder.int8.onnx"
+        // ttsJson = "tts.json"
+        // unicodeIndexer = "unicode_indexer.bin"
+        // voiceStyle = "voice.bin"
+        // supertonicLang = "en"  // ISO 639-1: en, zh, ja, ko, fr, de, es, etc.
     }
 
     fun createTts(context: Context) {
@@ -205,6 +243,14 @@ object TtsEngine {
             ruleFsts = ruleFsts ?: "",
             ruleFars = ruleFars ?: "",
             isKitten = isKitten,
+            isSupertonic = isSupertonic,
+            durationPredictor = durationPredictor ?: "",
+            textEncoder = textEncoder ?: "",
+            vectorEstimator = vectorEstimator ?: "",
+            supertonicVocoder = supertonicVocoder ?: "",
+            ttsJson = ttsJson ?: "",
+            unicodeIndexer = unicodeIndexer ?: "",
+            voiceStyle = voiceStyle ?: "",
         )
 
         speed = PreferenceHelper(context).getSpeed()

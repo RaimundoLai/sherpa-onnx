@@ -1,8 +1,17 @@
+/** @typedef {import('./types').OfflineSpeakerDiarizationConfig} OfflineSpeakerDiarizationConfig */
+/** @typedef {import('./types').OfflineSpeakerDiarizationHandle} OfflineSpeakerDiarizationHandle */
+/** @typedef {import('./types').SpeakerDiarizationSegment} SpeakerDiarizationSegment */
+
 const addon = require('./addon.js');
 
 class OfflineSpeakerDiarization {
-  constructor(handle) {
-    this.handle = handle;
+  constructor(configOrHandle) {
+    if (configOrHandle && typeof configOrHandle === 'object' && configOrHandle.clustering !== undefined) {
+      this.config = configOrHandle;
+      this.handle = addon.createOfflineSpeakerDiarization(configOrHandle);
+    } else {
+      this.handle = configOrHandle;
+    }
     this.sampleRate = addon.getOfflineSpeakerDiarizationSampleRate(this.handle);
   }
 
@@ -19,18 +28,8 @@ class OfflineSpeakerDiarization {
     return sd;
   }
   /**
-   * samples is a 1-d float32 array. Each element of the array should be
-   * in the range [-1, 1].
-   *
-   * We assume its sample rate equals to this.sampleRate.
-   *
-   * Returns an array of object, where an object is
-   *
-   *  {
-   *    "start": start_time_in_seconds,
-   *    "end": end_time_in_seconds,
-   *    "speaker": an_integer,
-   *  }
+   * @param {Float32Array} samples - 1-D float32 array in [-1, 1]
+   * @returns {SpeakerDiarizationSegment[]}
    */
   process(samples) {
     return addon.offlineSpeakerDiarizationProcess(this.handle, samples);

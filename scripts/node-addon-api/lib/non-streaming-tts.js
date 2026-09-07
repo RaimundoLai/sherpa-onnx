@@ -1,29 +1,78 @@
+/** @typedef {import('./types').OfflineTtsConfig} OfflineTtsConfig */
+/** @typedef {import('./types').OfflineTtsHandle} OfflineTtsHandle */
+/** @typedef {import('./types').TtsRequest} TtsRequest */
+/** @typedef {import('./types').GeneratedAudio} GeneratedAudio */
+
 const addon = require('./addon.js');
 
+const kFromAsyncFactory = Symbol('OfflineTts.fromAsync');
+
+class GenerationConfig {
+  constructor(opts = {}) {
+    Object.assign(this, opts);
+  }
+}
+
 class OfflineTts {
-  constructor(handle) {
-    this.handle = handle;
+  constructor(configOrInternal) {
+    if (configOrInternal && typeof configOrInternal === 'object' &&
+        configOrInternal[kFromAsyncFactory]) {
+      this.handle = configOrInternal.handle;
+      this.config = configOrInternal.config;
+    } else if (configOrInternal && typeof configOrInternal === 'object' &&
+               (configOrInternal.model !== undefined || configOrInternal.ruleFsts !== undefined)) {
+      this.config = configOrInternal;
+      this.handle = addon.createOfflineTts(this.config);
+    } else {
+      this.handle = configOrInternal;
+    }
     this.numSpeakers = addon.getOfflineTtsNumSpeakers(this.handle);
     this.sampleRate = addon.getOfflineTtsSampleRate(this.handle);
   }
 
   static async createAsync(config) {
     const handle = await addon.createOfflineTtsAsync(config);
-    return new OfflineTts(handle);
+    return new OfflineTts({
+      [kFromAsyncFactory]: true,
+      handle,
+      config,
+    });
   }
 
-  /*
-   input obj: {text: "xxxx", sid: 0, speed: 1.0}
-   where text is a string, sid is a int32, speed is a float
-
-   return an object {samples: Float32Array, sampleRate: <a number>}
+  /**
+   * Generate audio synchronously.
+   * @param {TtsRequest} obj
+   * @returns {GeneratedAudio}
    */
   generate(obj) {
+    if (!obj || typeof obj !== 'object') {
+      throw new TypeError('generate() expects an object');
+    }
+
+    // If generationConfig is present, use new API
+    if (obj.generationConfig !== undefined) {
+      return addon.offlineTtsGenerateWithConfig(this.handle, obj);
+    }
+
+    // Fallback to legacy path
     return addon.offlineTtsGenerate(this.handle, obj);
   }
-
   generateAsync(obj) {
-    return addon.offlineTtsGenerateAsync(this.handle, obj);
+    const {onProgress, ...rest} = obj;
+    const hasConfig = obj.generationConfig !== undefined;
+    const fn = hasConfig && addon.offlineTtsGenerateAsyncWithConfig ?
+        addon.offlineTtsGenerateAsyncWithConfig :
+        addon.offlineTtsGenerateAsync;
+
+    return fn(this.handle, {
+      ...rest,
+      callback: typeof onProgress === 'function' ?
+          (info) => {
+            const ret = onProgress(info);
+            return ret === 0 || ret === false ? 0 : 1;
+          } :
+          undefined,
+    });
   }
 
   extractMiocodecEmbeddings(audioDir) {
@@ -49,8 +98,11 @@ class OfflineTts {
   convertVoiceWithMiocodecEmbeddingsAsync(obj) {
     return addon.offlineTtsConvertVoiceWithMiocodecEmbeddingsAsync(this.handle, obj);
   }
+  }
 }
+
 
 module.exports = {
   OfflineTts,
+  GenerationConfig,
 }

@@ -4,6 +4,8 @@
 
 #include "sherpa-onnx/csrc/offline-punctuation.h"
 
+#include <string>
+
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/jni/common.h"
 
@@ -115,5 +117,5 @@ Java_com_k2fsa_sherpa_onnx_OfflinePunctuation_addPunctuation(JNIEnv *env,
 
   env->ReleaseStringUTFChars(text, ptext);
 
-  return env->NewStringUTF(result.c_str());
+  return SafeNewStringUTF(env, result);
 }

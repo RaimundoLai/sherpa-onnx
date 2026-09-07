@@ -4,10 +4,11 @@
 
 #include "sherpa-onnx/csrc/homophone-replacer.h"
 
+#include <cctype>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
-#include <strstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -88,7 +89,7 @@ class HomophoneReplacer::Impl {
  public:
   explicit Impl(const HomophoneReplacerConfig &config) : config_(config) {
     {
-      std::ifstream is(config.lexicon);
+      auto is = OpenInputFile(config.lexicon);
       InitLexicon(is);
     }
 
@@ -110,7 +111,7 @@ class HomophoneReplacer::Impl {
     {
       auto buf = ReadFile(mgr, config.lexicon);
 
-      std::istrstream is(buf.data(), buf.size());
+      std::istringstream is(std::string(buf.data(), buf.size()));
       InitLexicon(is);
     }
 
@@ -123,7 +124,7 @@ class HomophoneReplacer::Impl {
           SHERPA_ONNX_LOGE("hr rule fst: %s", f.c_str());
         }
         auto buf = ReadFile(mgr, f);
-        std::istrstream is(buf.data(), buf.size());
+        std::istringstream is(std::string(buf.data(), buf.size()));
         replacer_list_.push_back(
             std::make_unique<kaldifst::TextNormalizer>(is));
       }
@@ -175,6 +176,9 @@ class HomophoneReplacer::Impl {
           current_pronunciations.clear();
         }
         ans += w;
+        if (isalpha(w[0])) {
+          ans.push_back(' ');
+        }
         continue;
       }
 
@@ -193,6 +197,10 @@ class HomophoneReplacer::Impl {
 
     if (config_.debug) {
       SHERPA_ONNX_LOGE("Output text: '%s'", ans.c_str());
+    }
+
+    if (!ans.empty() && ans.back() == ' ') {
+      ans.pop_back();
     }
 
     return ans;

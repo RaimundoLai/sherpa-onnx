@@ -3,6 +3,7 @@
 // Copyright (c)  2022-2023  Xiaomi Corporation
 
 #include "sherpa-onnx/csrc/symbol-table.h"
+#include "sherpa-onnx/csrc/macros.h"
 
 #include <algorithm>
 #include <cassert>
@@ -10,11 +11,10 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <strstream>
+#include <unordered_map>
 #include <utility>
 
 #if __ANDROID_API__ >= 9
-
 #include "android/asset_manager.h"
 #include "android/asset_manager_jni.h"
 #endif
@@ -130,14 +130,14 @@ std::unordered_map<std::string, int32_t> ReadTokens(
     iss >> std::ws;
     if (!iss.eof()) {
       SHERPA_ONNX_LOGE("Error: %s", line.c_str());
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
 
 #if 0
     if (token2id.count(sym)) {
       SHERPA_ONNX_LOGE("Duplicated token %s. Line %s. Existing ID: %d",
                        sym.c_str(), line.c_str(), token2id.at(sym));
-      exit(-1);
+      SHERPA_ONNX_EXIT(-1);
     }
 #endif
     if (id2token) {
@@ -152,7 +152,7 @@ std::unordered_map<std::string, int32_t> ReadTokens(
 
 SymbolTable::SymbolTable(const std::string &filename, bool is_file) {
   if (is_file) {
-    std::ifstream is(filename);
+    auto is = OpenInputFile(filename);
     Init(is);
   } else {
     std::istringstream iss(filename);
@@ -164,7 +164,7 @@ template <typename Manager>
 SymbolTable::SymbolTable(Manager *mgr, const std::string &filename) {
   auto buf = ReadFile(mgr, filename);
 
-  std::istrstream is(buf.data(), buf.size());
+  std::istringstream is(std::string(buf.data(), buf.size()));
   Init(is);
 }
 
@@ -233,7 +233,14 @@ std::ostream &operator<<(std::ostream &os, const SymbolTable &symbol_table) {
 void SymbolTable::ApplyBase64Decode() {
   sym2id_.clear();
   for (auto &p : id2sym_) {
-    p.second = Base64Decode(p.second);
+    if (p.second == " ") {
+      // for FunASR nano models, there is an empty string in the tokens.txt,
+      // which is converted to " " while reading it in sherpa-onnx. We convert
+      // it back to "" here
+      p.second = "";
+    } else {
+      p.second = Base64Decode(p.second);
+    }
     sym2id_[p.second] = p.first;
   }
 }
