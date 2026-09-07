@@ -106,8 +106,8 @@ jobs:
           export ANDROID_NDK=$ANDROID_NDK_LATEST_HOME
           ./build-android-x86.sh
           mkdir -p ./jniLibs/x86
-          cp -v ./build-android-x86/install/lib/*.so ./jniLibs/x86
-          rm -rf ./build-android-x86
+          cp -v ./build-android-x86-static/install/lib/*.so ./jniLibs/x86
+          rm -rf ./build-android-x86-static
 
       - name: Copy files
         shell: bash
@@ -145,7 +145,7 @@ jobs:
 
             rm -rf huggingface
             export GIT_CLONE_PROTECTION_ACTIVE=false
-            GIT_LFS_SKIP_SMUDGE=1 git clone https://csukuangfj:$HF_TOKEN@huggingface.co/csukuangfj/sherpa-onnx-libs huggingface
+            GIT_LFS_SKIP_SMUDGE=1 git clone https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/sherpa-onnx-libs huggingface
 
             cd huggingface
             dst=$SHERPA_ONNX_VERSION
@@ -160,7 +160,7 @@ jobs:
 
             git commit -m "upload sherpa-onnx-${SHERPA_ONNX_VERSION}-android.tar.bz2"
 
-            git push https://csukuangfj:$HF_TOKEN@huggingface.co/csukuangfj/sherpa-onnx-libs main
+            git push https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/sherpa-onnx-libs main
 
       - name: Release android libs
         if: (github.repository_owner == 'csukuangfj' || github.repository_owner == 'k2-fsa') && github.event_name == 'push' && contains(github.ref, 'refs/tags/')
@@ -171,7 +171,7 @@ jobs:
           file: sherpa-onnx-*-android*.tar.bz2
           # repo_name: k2-fsa/sherpa-onnx
           # repo_token: ${{ secrets.UPLOAD_GH_SHERPA_ONNX_TOKEN }}
-          # tag: v1.11.3
+          # tag: v1.12.17
 
   build-android-aar-static:
     needs: [build-android-static-libs]
@@ -280,7 +280,7 @@ jobs:
 
             rm -rf huggingface
             export GIT_CLONE_PROTECTION_ACTIVE=false
-            GIT_LFS_SKIP_SMUDGE=1 git clone https://csukuangfj:$HF_TOKEN@huggingface.co/csukuangfj/sherpa-onnx-libs huggingface
+            GIT_LFS_SKIP_SMUDGE=1 git clone https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/sherpa-onnx-libs huggingface
 
             cd huggingface
             dst=android/aar/$SHERPA_ONNX_VERSION
@@ -295,7 +295,7 @@ jobs:
 
             git commit -m "upload sherpa-onnx-${SHERPA_ONNX_VERSION}.aar"
 
-            git push https://csukuangfj:$HF_TOKEN@huggingface.co/csukuangfj/sherpa-onnx-libs main
+            git push https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/sherpa-onnx-libs main
 
       - name: Release android aar
         if: (github.repository_owner == 'csukuangfj' || github.repository_owner == 'k2-fsa') && github.event_name == 'push' && contains(github.ref, 'refs/tags/')
@@ -306,4 +306,4 @@ jobs:
           file: ./*.aar
           # repo_name: k2-fsa/sherpa-onnx
           # repo_token: ${{ secrets.UPLOAD_GH_SHERPA_ONNX_TOKEN }}
-          # tag: v1.11.3
+          # tag: v1.12.17

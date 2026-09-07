@@ -42,13 +42,35 @@ struct OfflineRecognitionResult {
   /// only)
   std::vector<float> durations;
 
+  /// ys_log_probs[i] contains the log probability (confidence) for tokens[i].
+  std::vector<float> ys_log_probs;
+
+  // Word IDs from FST decoding (CTC models with FST decoder only).
   std::vector<int32_t> words;
+
+  // Segment-level data (from Whisper with segment timestamps enabled).
+  // These are parallel vectors: segment_timestamps.size() ==
+  // segment_durations.size() == segment_texts.size()
+  std::vector<float> segment_timestamps;   // start time of each segment
+  std::vector<float> segment_durations;    // duration of each segment
+  std::vector<std::string> segment_texts;  // text of each segment
 
   std::string AsJsonString() const;
 };
 
 struct WhisperTag {
   int32_t dim = 80;
+
+  // When true, place each analysis window so that its midpoint is at
+  // i * frame_shift, matching the centered STFT that OpenAI Whisper's
+  // feature extractor uses (torch.stft with center=True). The kaldi-style
+  // placement used otherwise centers frame i at
+  // i * frame_shift + frame_shift / 2, i.e. every frame is half a
+  // frame-shift (5 ms) late relative to the convention the models were
+  // trained on. Models that are robust to the 5 ms offset (e.g. Whisper
+  // itself) keep the historical behavior; Qwen3-ASR is sensitive to it
+  // (see k2-fsa/sherpa-onnx#3535), so its recognizer opts in.
+  bool align_to_stft_center = false;
 };
 
 struct CEDTag {};
@@ -56,6 +78,9 @@ struct CEDTag {};
 // It uses a neural network model, a preprocessor, to convert
 // audio samples to features
 struct MoonshineTag {};
+
+// It is based on Wav2Vec, accepting raw audio samples as input
+struct OmnilingualAsrTag {};
 
 class OfflineStream {
  public:
@@ -65,6 +90,7 @@ class OfflineStream {
   explicit OfflineStream(WhisperTag tag);
   explicit OfflineStream(CEDTag tag);
   explicit OfflineStream(MoonshineTag tag);
+  explicit OfflineStream(OmnilingualAsrTag tag);
   ~OfflineStream();
 
   /**
@@ -99,6 +125,17 @@ class OfflineStream {
 
   /** Get the ContextGraph of this stream */
   const ContextGraphPtr &GetContextGraph() const;
+
+  // Generic per-stream option mechanism (key-value string pairs).
+  void SetOption(const std::string &key, const std::string &value);
+  bool HasOption(const std::string &key) const;
+
+  // Returns the value for the given key, or an empty string if the key
+  // does not exist. No exception is thrown for missing keys.
+  const std::string &GetOption(const std::string &key) const;
+  int32_t GetOptionInt(const std::string &key, int32_t default_value = 0) const;
+  float GetOptionFloat(const std::string &key,
+                       float default_value = 0.0f) const;
 
  private:
   class Impl;

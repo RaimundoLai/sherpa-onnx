@@ -5,6 +5,7 @@
 #include "sherpa-onnx/csrc/circular-buffer.h"
 
 #include <algorithm>
+#include <vector>
 
 #include "sherpa-onnx/csrc/macros.h"
 
@@ -14,7 +15,7 @@ CircularBuffer::CircularBuffer(int32_t capacity) {
   if (capacity <= 0) {
     SHERPA_ONNX_LOGE("Please specify a positive capacity. Given: %d\n",
                      capacity);
-    exit(-1);
+    SHERPA_ONNX_EXIT(-1);
   }
   buffer_.resize(capacity);
 }

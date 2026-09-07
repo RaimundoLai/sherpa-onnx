@@ -47,6 +47,8 @@ class OfflineTtsMiocodecLlamaModel {
 
   ~OfflineTtsMiocodecLlamaModel();
 
+  int32_t SampleRate() const;
+
   // ---------------------------------------------------------------------------
   // Standalone embedding extraction  (pre-computable / cacheable)
   // ---------------------------------------------------------------------------

@@ -44,6 +44,14 @@ std::vector<char> ReadFile(NativeResourceManager *mgr,
                            const std::string &filename);
 #endif
 
+std::string ResolveAbsolutePath(const std::string &path);
+
+std::ifstream OpenInputFile(const std::string &filename,
+                            std::ios_base::openmode mode = std::ios_base::in);
+
+std::ofstream OpenOutputFile(const std::string &filename,
+                             std::ios_base::openmode mode = std::ios_base::out);
+
 }  // namespace sherpa_onnx
 
 #endif  // SHERPA_ONNX_CSRC_FILE_UTILS_H_

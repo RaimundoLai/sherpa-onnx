@@ -8,7 +8,7 @@
 #include <ios>
 #include <memory>
 #include <string>
-#include <strstream>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -16,6 +16,7 @@
 #include "kaldifst/csrc/kaldi-fst-io.h"
 #include "kaldifst/csrc/text-normalizer.h"
 #include "sherpa-onnx/csrc/file-utils.h"
+#include "sherpa-onnx/csrc/fst-utils.h"
 #include "sherpa-onnx/csrc/kokoro-multi-lang-lexicon.h"
 #include "sherpa-onnx/csrc/lexicon.h"
 #include "sherpa-onnx/csrc/macros.h"
@@ -103,7 +104,7 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 #endif
         }
         auto buf = ReadFile(mgr, f);
-        std::istrstream is(buf.data(), buf.size());
+        std::istringstream is(std::string(buf.data(), buf.size()));
         tn_list_.push_back(std::make_unique<kaldifst::TextNormalizer>(is));
       }
     }
@@ -124,19 +125,11 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
 
         auto buf = ReadFile(mgr, f);
 
-        std::unique_ptr<std::istream> s(
-            new std::istrstream(buf.data(), buf.size()));
-
-        std::unique_ptr<fst::FarReader<fst::StdArc>> reader(
-            fst::FarReader<fst::StdArc>::Open(std::move(s)));
-
-        for (; !reader->Done(); reader->Next()) {
-          std::unique_ptr<fst::StdConstFst> r(
-              fst::CastOrConvertToConstFst(reader->GetFst()->Copy()));
-
+        auto fsts = ReadFstsFromFar(buf);
+        for (auto &r : fsts) {
           tn_list_.push_back(
               std::make_unique<kaldifst::TextNormalizer>(std::move(r)));
-        }  // for (; !reader->Done(); reader->Next())
+        }
       }    // for (const auto &f : files)
     }      // if (!config.rule_fars.empty())
   }
@@ -149,9 +142,30 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
     return model_->GetMetaData().num_speakers;
   }
 
+  // Supported options in GenerationConfig:
+  //   - sid: Speaker ID for multi-speaker models
+  //   - speed: Speech speed factor. If left at 1.0, it falls back to the
+  //            default implied by kokoro.length_scale.
+  //   - silence_scale: Scale applied to pauses in the generated audio. If left
+  //                    at 0.2, it falls back to OfflineTtsConfig.silence_scale.
+  //
+  // Supported extra options in config.extra:
+  //   - lang: Language override for Kokoro >= 1.0. Defaults to
+  //           kokoro.lang if provided, otherwise meta_data.voice.
   GeneratedAudio Generate(
-      const std::string &_text, int64_t sid = 0, float speed = 1.0, bool g2p = false, const std::string &_lang = "en-us",
+      const std::string &_text, const GenerationConfig &gen_config,
       GeneratedAudioCallback callback = nullptr) const override {
+    if (config_.model.debug) {
+      SHERPA_ONNX_LOGE("%s", gen_config.ToString().c_str());
+    }
+
+    int64_t sid = gen_config.sid;
+    float speed = gen_config.speed;
+    if (speed <= 0) {
+      SHERPA_ONNX_LOGE("Speed must be > 0. Given: %f", speed);
+      return {};
+    }
+
     const auto &meta_data = model_->GetMetaData();
     int32_t num_speakers = meta_data.num_speakers;
 
@@ -220,29 +234,25 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
       }
     }
 
+    std::string lang = gen_config.GetExtraString("lang");
+    if (lang.empty()) {
+      lang = config_.model.kokoro.lang.empty() ? meta_data.voice
+                                               : config_.model.kokoro.lang;
+    }
+
+    bool g2p = gen_config.GetExtraString("g2p") == "1";
     std::vector<TokenIDs> token_ids;
     if (g2p) {
       OfflineTtsFrontend* base_ptr = frontend_.get();
       KokoroMultiLangLexicon* derived_ptr = dynamic_cast<KokoroMultiLangLexicon*>(base_ptr);
       if (derived_ptr) {
-        token_ids = derived_ptr->ConvertPhonemeToTokenIds(text, _lang);
+        token_ids = derived_ptr->ConvertPhonemeToTokenIds(text, lang);
       } else {
         SHERPA_ONNX_LOGE("Error: Frontend is not a KokoroMultiLangLexicon instance when g2p is enabled.");
         token_ids.clear();
       }
     } else {
-      token_ids = frontend_->ConvertTextToTokenIds(text, _lang);
-    }
-
-    if (token_ids.empty() ||
-        (token_ids.size() == 1 && token_ids[0].tokens.empty())) {
-      if (config_.model.debug) {
-        SHERPA_ONNX_LOGE("No tokens generated, adding period token (4)");
-      }
-      TokenIDs period_token;
-      period_token.tokens = {0, 4, 0};  // BOS(0), .(4), EOS(0)
-      token_ids.clear();
-      token_ids.push_back(period_token);
+      token_ids = frontend_->ConvertTextToTokenIds(text, lang);
     }
 
     if (token_ids.empty() ||
@@ -313,7 +323,8 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
         batch_x.push_back(std::move(x[k]));
       }
 
-      auto audio = Process(batch_x, sid, speed);
+      auto audio =
+          Process(batch_x, sid, speed, gen_config.silence_scale);
       ans.sample_rate = audio.sample_rate;
       ans.samples.insert(ans.samples.end(), audio.samples.begin(),
                          audio.samples.end());
@@ -334,7 +345,8 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
     }
 
     if (!batch_x.empty()) {
-      auto audio = Process(batch_x, sid, speed);
+      auto audio =
+          Process(batch_x, sid, speed, gen_config.silence_scale);
       ans.sample_rate = audio.sample_rate;
       ans.samples.insert(ans.samples.end(), audio.samples.begin(),
                          audio.samples.end());
@@ -347,6 +359,21 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
     }
 
     return ans;
+  }
+
+  [[deprecated("Use Generate(text, GenerationConfig, callback) instead")]]
+  GeneratedAudio Generate(
+      const std::string &text, int64_t sid = 0, float speed = 1.0,
+      GeneratedAudioCallback callback = nullptr) const override {
+    GenerationConfig gen_config;
+    gen_config.sid = sid;
+    gen_config.speed = speed;
+    gen_config.silence_scale = config_.silence_scale;
+    if (!config_.model.kokoro.lang.empty()) {
+      gen_config.extra["lang"] = config_.model.kokoro.lang;
+    }
+
+    return Generate(text, gen_config, std::move(callback));
   }
 
  private:
@@ -402,7 +429,8 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
   }
 
   GeneratedAudio Process(const std::vector<std::vector<int64_t>> &tokens,
-                         int32_t sid, float speed) const {
+                         int32_t sid, float speed,
+                         float silence_scale) const {
     int32_t num_tokens = 0;
     for (const auto &k : tokens) {
       num_tokens += k.size();
@@ -438,7 +466,10 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
     ans.sample_rate = model_->GetMetaData().sample_rate;
     ans.samples = std::vector<float>(p, p + total);
 
-    float silence_scale = config_.silence_scale;
+    if (silence_scale == 0.2f) {
+      silence_scale = config_.silence_scale;
+    }
+
     if (silence_scale != 1) {
       ans = ans.ScaleSilence(silence_scale);
     }

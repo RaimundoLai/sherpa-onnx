@@ -9,11 +9,14 @@
 #include <stdio.h>
 
 #include <algorithm>
-#include <chrono>  // NOLINT
+#include <chrono>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "sherpa-onnx/csrc/online-recognizer.h"
+#include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/online-stream.h"
 #include "sherpa-onnx/csrc/parse-options.h"
 #include "sherpa-onnx/csrc/resample.h"
@@ -90,7 +93,7 @@ for a list of pre-trained models to download.
     fprintf(stderr, "Error: Please provide exactly 1 wave file. Given: %d\n\n",
             po.NumArgs());
     po.PrintUsage();
-    exit(EXIT_FAILURE);
+    SHERPA_ONNX_EXIT(EXIT_FAILURE);
   }
 
   fprintf(stderr, "%s\n", vad_config.ToString().c_str());
@@ -138,13 +141,13 @@ for a list of pre-trained models to download.
     samples = std::move(out_samples);
     fprintf(stderr, "Resampling done\n");
   }
-  const float tail_padding_len =  1.28;  // related to model chunk-size
-  std::vector<float> tail_paddings(
-      static_cast<int>(tail_padding_len * 16000));
+  const float tail_padding_len = 1.28;  // related to model chunk-size
+  std::vector<float> tail_paddings(static_cast<int>(tail_padding_len * 16000));
 
   fprintf(stderr, "Started!\n");
   int32_t window_size = vad_config.ten_vad.model.empty()
-    ? vad_config.silero_vad.window_size : vad_config.ten_vad.window_size;
+                            ? vad_config.silero_vad.window_size
+                            : vad_config.ten_vad.window_size;
   int32_t offset = 0;
   int32_t segment_id = 0;
   bool speech_started = false;
@@ -178,8 +181,8 @@ for a list of pre-trained models to download.
       }
       auto text = recognizer.GetResult(s.get()).text;
       if (!text.empty()) {
-        fprintf(stderr, "vad segment(%d:%.3f-%.3f) results: %s\n",
-            segment_id, start_time, end_time, text.c_str());
+        fprintf(stderr, "vad segment(%d:%.3f-%.3f) results: %s\n", segment_id,
+                start_time, end_time, text.c_str());
       }
       vad->Pop();
     }

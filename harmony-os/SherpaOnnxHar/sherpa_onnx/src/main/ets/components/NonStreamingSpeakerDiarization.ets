@@ -11,6 +11,7 @@ import { SpeakerEmbeddingExtractorConfig } from './SpeakerIdentification';
 
 export class OfflineSpeakerSegmentationPyannoteModelConfig {
   public model: string = '';
+  public windowShiftRatio: number = 0.1;
 }
 
 export class OfflineSpeakerSegmentationModelConfig {

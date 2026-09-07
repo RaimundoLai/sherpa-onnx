@@ -3,6 +3,9 @@
 // Copyright (c)  2024  Xiaomi Corporation
 #include "sherpa-onnx/csrc/speaker-embedding-extractor.h"
 
+#include <memory>
+#include <vector>
+
 #include "sherpa-onnx/jni/common.h"
 
 namespace sherpa_onnx {
@@ -76,6 +79,7 @@ Java_com_k2fsa_sherpa_onnx_SpeakerEmbeddingExtractor_newFromFile(
 
   if (!config.Validate()) {
     SHERPA_ONNX_LOGE("Errors found in config!");
+    return 0;
   }
 
   auto extractor = new sherpa_onnx::SpeakerEmbeddingExtractor(config);

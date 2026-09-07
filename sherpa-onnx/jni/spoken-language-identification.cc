@@ -4,6 +4,9 @@
 
 #include "sherpa-onnx/csrc/spoken-language-identification.h"
 
+#include <memory>
+#include <string>
+
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/jni/common.h"
 
@@ -137,5 +140,5 @@ Java_com_k2fsa_sherpa_onnx_SpokenLanguageIdentification_compute(JNIEnv *env,
   sherpa_onnx::OfflineStream *s =
       reinterpret_cast<sherpa_onnx::OfflineStream *>(s_ptr);
   std::string lang = slid->Compute(s);
-  return env->NewStringUTF(lang.c_str());
+  return SafeNewStringUTF(env, lang);
 }

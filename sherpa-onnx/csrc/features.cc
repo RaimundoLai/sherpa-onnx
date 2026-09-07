@@ -6,8 +6,9 @@
 
 #include <algorithm>
 #include <memory>
-#include <mutex>  // NOLINT
+#include <mutex>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "kaldi-native-fbank/csrc/online-feature.h"
@@ -91,7 +92,7 @@ class FeatureExtractor::Impl {
             "You changed the input sampling rate!! Expected: %d, given: "
             "%d",
             resampler_->GetInputSamplingRate(), sampling_rate);
-        exit(-1);
+        SHERPA_ONNX_EXIT(-1);
       }
 
       std::vector<float> samples;

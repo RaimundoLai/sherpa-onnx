@@ -4,6 +4,7 @@
 
 #include "sherpa-onnx/csrc/offline-tts-kokoro-model-config.h"
 
+#include <string>
 #include <vector>
 
 #include "sherpa-onnx/csrc/file-utils.h"
@@ -58,6 +59,16 @@ bool OfflineTtsKokoroModelConfig::Validate() const {
 
   if (!FileExists(tokens)) {
     SHERPA_ONNX_LOGE("--kokoro-tokens: '%s' does not exist", tokens.c_str());
+    return false;
+  }
+
+  if (voices.empty()) {
+    SHERPA_ONNX_LOGE("Please provide --kokoro-voices");
+    return false;
+  }
+
+  if (!FileExists(voices)) {
+    SHERPA_ONNX_LOGE("--kokoro-voices: '%s' does not exist", voices.c_str());
     return false;
   }
 

@@ -5,8 +5,10 @@
 #include "sherpa-onnx/csrc/offline-dolphin-model.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #if __ANDROID_API__ >= 9
 #include "android/asset_manager.h"
@@ -17,6 +19,7 @@
 #include "rawfile/raw_file_manager.h"
 #endif
 
+#include "Eigen/Dense"
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
@@ -32,8 +35,9 @@ class OfflineDolphinModel::Impl {
         env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
-    auto buf = ReadFile(config_.dolphin.model);
-    Init(buf.data(), buf.size());
+    sess_ = std::make_unique<Ort::Session>(
+        env_, SHERPA_ONNX_TO_ORT_PATH(config_.dolphin.model), sess_opts_);
+    Init(nullptr, 0);
   }
 
   template <typename Manager>
@@ -63,24 +67,30 @@ class OfflineDolphinModel::Impl {
 
   void NormalizeFeatures(float *features, int32_t num_frames,
                          int32_t feat_dim) const {
-    auto p = features;
-    const auto &mean = meta_data_.mean;
-    const auto &invstd = meta_data_.inv_stddev;
+    using RowMajorMat =
+        Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    Eigen::Map<RowMajorMat> x(features, num_frames, feat_dim);
 
-    for (int32_t f = 0; f < num_frames; ++f) {
-      for (int32_t d = 0; d < feat_dim; ++d) {
-        p[d] = (p[d] - mean[d]) * invstd[d];
-      }
-      p += feat_dim;
-    }
+    Eigen::Map<const Eigen::RowVectorXf> mean(meta_data_.mean.data(), feat_dim);
+    Eigen::Map<const Eigen::RowVectorXf> inv_std(meta_data_.inv_stddev.data(),
+                                                 feat_dim);
+    x.array() =
+        (x.array().rowwise() - mean.array()).rowwise() * inv_std.array();
   }
 
   OrtAllocator *Allocator() { return allocator_; }
 
  private:
   void Init(void *model_data, size_t model_data_length) {
-    sess_ = std::make_unique<Ort::Session>(env_, model_data, model_data_length,
-                                           sess_opts_);
+    if (model_data) {
+      sess_ = std::make_unique<Ort::Session>(
+          env_, model_data, model_data_length, sess_opts_);
+    } else if (!sess_) {
+      SHERPA_ONNX_LOGE(
+          "Please pass model data or initialize the session outside of "
+          "this function");
+      SHERPA_ONNX_EXIT(-1);
+    }
 
     GetInputNames(sess_.get(), &input_names_, &input_names_ptr_);
 

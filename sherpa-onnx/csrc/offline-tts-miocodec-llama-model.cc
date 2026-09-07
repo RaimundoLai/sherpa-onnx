@@ -317,6 +317,8 @@ class OfflineTtsMiocodecLlamaModel::Impl {
          dec_buf.size(), emb_buf.data(), emb_buf.size());
   }
 
+  int32_t SampleRate() const { return sample_rate_; }
+
   // ------ Embedding extraction -----------------------------------------------
 
   std::vector<float> ExtractSpeakerEmbedding(const float *audio_samples,
@@ -334,15 +336,21 @@ class OfflineTtsMiocodecLlamaModel::Impl {
         memory_info, fbank.data(), fbank.size(), fbank_shape.data(),
         fbank_shape.size());
 
-    auto out = sess_campplus_->Run({}, campplus_input_names_ptr_.data(),
-                                   &fbank_tensor, 1,
-                                   campplus_output_names_ptr_.data(),
-                                   campplus_output_names_ptr_.size());
-    // Output: (1, 192)
-    const float *data = out[0].GetTensorData<float>();
-    auto shape = out[0].GetTensorTypeAndShapeInfo().GetShape();
-    int32_t emb_dim = static_cast<int32_t>(shape.back());
-    return std::vector<float>(data, data + emb_dim);
+    try {
+      auto out = sess_campplus_->Run({}, campplus_input_names_ptr_.data(),
+                                     &fbank_tensor, 1,
+                                     campplus_output_names_ptr_.data(),
+                                     campplus_output_names_ptr_.size());
+      // Output: (1, 192)
+      const float *data = out[0].GetTensorData<float>();
+      auto shape = out[0].GetTensorTypeAndShapeInfo().GetShape();
+      int32_t emb_dim = 1;
+      for (auto d : shape) emb_dim *= d;
+      return std::vector<float>(data, data + emb_dim);
+    } catch (const Ort::Exception& e) {
+      SHERPA_ONNX_LOGE("ONNX Runtime Exception in ExtractSpeakerEmbedding: %s", e.what());
+      return {};
+    }
   }
 
   MiocodecFeatures ExtractMiocodecFeatures(const float *audio_samples,
@@ -357,45 +365,55 @@ class OfflineTtsMiocodecLlamaModel::Impl {
         static_cast<size_t>(audio_len), audio_shape.data(),
         audio_shape.size());
 
-    auto out = sess_miocodec_enc_->Run({}, enc_input_names_ptr_.data(),
-                                       &audio_tensor, 1,
-                                       enc_output_names_ptr_.data(),
-                                       enc_output_names_ptr_.size());
+    try {
+      auto out = sess_miocodec_enc_->Run({}, enc_input_names_ptr_.data(),
+                                         &audio_tensor, 1,
+                                         enc_output_names_ptr_.data(),
+                                         enc_output_names_ptr_.size());
 
-    // Expected outputs: content_indices (1, T_tokens) and global_emb (1, C)
-    MiocodecFeatures feats;
+      // Expected outputs: content_indices (1, T_tokens) and global_emb (1, C)
+      MiocodecFeatures feats;
 
-    // Output 0: content indices (int64 or float — cast to int64)
-    {
-      auto &t = out[0];
-      auto shape = t.GetTensorTypeAndShapeInfo().GetShape();
-      int64_t n = shape.back();
-      auto type = t.GetTensorTypeAndShapeInfo().GetElementType();
-      if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
-        const int64_t *p = t.GetTensorData<int64_t>();
-        feats.content_indices.assign(p, p + n);
-      } else {
-        // Some exported models use float indices — round to int
-        const float *p = t.GetTensorData<float>();
-        feats.content_indices.resize(n);
-        for (int64_t i = 0; i < n; ++i) {
-          feats.content_indices[i] =
-              static_cast<int64_t>(std::round(p[i]));
+      // Output 0: content indices (int64 or float — cast to int64)
+      {
+        auto &t = out[0];
+        auto shape = t.GetTensorTypeAndShapeInfo().GetShape();
+        int64_t n = 1;
+        for (auto d : shape) n *= d;
+        auto type = t.GetTensorTypeAndShapeInfo().GetElementType();
+        if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+          const int64_t *p = t.GetTensorData<int64_t>();
+          feats.content_indices.assign(p, p + n);
+        } else if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+          const int32_t *p = t.GetTensorData<int32_t>();
+          feats.content_indices.assign(p, p + n);
+        } else {
+          // Some exported models use float indices — round to int
+          const float *p = t.GetTensorData<float>();
+          feats.content_indices.resize(n);
+          for (int64_t i = 0; i < n; ++i) {
+            feats.content_indices[i] =
+                static_cast<int64_t>(std::round(p[i]));
+          }
         }
       }
-    }
 
-    // Output 1: global embedding (1, C)
-    {
-      auto &t = out[1];
-      auto shape = t.GetTensorTypeAndShapeInfo().GetShape();
-      int64_t c = shape.back();
-      feats.global_embedding_dim = static_cast<int32_t>(c);
-      const float *p = t.GetTensorData<float>();
-      feats.global_embedding.assign(p, p + c);
-    }
+      // Output 1: global embedding (1, C)
+      {
+        auto &t = out[1];
+        auto shape = t.GetTensorTypeAndShapeInfo().GetShape();
+        int64_t c = 1;
+        for (auto d : shape) c *= d;
+        feats.global_embedding_dim = static_cast<int32_t>(c);
+        const float *p = t.GetTensorData<float>();
+        feats.global_embedding.assign(p, p + c);
+      }
 
-    return feats;
+      return feats;
+    } catch (const Ort::Exception& e) {
+      SHERPA_ONNX_LOGE("ONNX Runtime Exception in ExtractMiocodecFeatures: %s", e.what());
+      return {};
+    }
   }
 
   // ------ Core generation ----------------------------------------------------
@@ -718,6 +736,12 @@ class OfflineTtsMiocodecLlamaModel::Impl {
     GetOutputNames(sess_miocodec_dec_.get(), &dec_output_names_,
                    &dec_output_names_ptr_);
 
+    {
+      Ort::AllocatorWithDefaultOptions allocator;  // used in the macro below
+      Ort::ModelMetadata meta_data = sess_miocodec_dec_->GetModelMetadata();
+      SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(sample_rate_, "sample_rate", 24000);
+    }
+
     // Parse embeddings.npz
     std::unordered_map<std::string, NpzArray> arrays;
     if (!ParseNpz(reinterpret_cast<const uint8_t *>(emb_data), emb_size,
@@ -910,6 +934,8 @@ class OfflineTtsMiocodecLlamaModel::Impl {
   std::vector<float> tok_emb_weight_;    // (vocab_size, hidden_dim)
   std::vector<float> spk_proj_weight_;   // (hidden_dim, 192)
   std::vector<float> spk_proj_bias_;     // (hidden_dim,)
+
+  int32_t sample_rate_ = 24000;
 };
 
 // ---------------------------------------------------------------------------
@@ -926,6 +952,10 @@ OfflineTtsMiocodecLlamaModel::OfflineTtsMiocodecLlamaModel(
     : impl_(std::make_unique<Impl>(mgr, config)) {}
 
 OfflineTtsMiocodecLlamaModel::~OfflineTtsMiocodecLlamaModel() = default;
+
+int32_t OfflineTtsMiocodecLlamaModel::SampleRate() const {
+  return impl_->SampleRate();
+}
 
 std::vector<float> OfflineTtsMiocodecLlamaModel::ExtractSpeakerEmbedding(
     const float *audio_samples, int32_t audio_len) {

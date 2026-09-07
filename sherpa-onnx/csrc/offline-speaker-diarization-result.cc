@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <sstream>
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "sherpa-onnx/csrc/macros.h"
 
@@ -102,9 +104,17 @@ OfflineSpeakerDiarizationResult::SortBySpeaker() const {
            ((a.Speaker() == b.Speaker()) && (a.Start() < b.Start()));
   });
 
-  std::vector<std::vector<OfflineSpeakerDiarizationSegment>> ans(NumSpeakers());
+  int32_t num_speakers = NumSpeakers();
+  std::vector<std::vector<OfflineSpeakerDiarizationSegment>> ans(num_speakers);
   for (auto &s : tmp) {
-    ans[s.Speaker()].push_back(std::move(s));
+    int32_t spk = s.Speaker();
+    if (spk < 0 || spk >= num_speakers) {
+      SHERPA_ONNX_LOGE(
+          "SortBySpeaker: speaker ID %d out of range [0, %d), skipping segment",
+          spk, num_speakers);
+      continue;
+    }
+    ans[spk].push_back(std::move(s));
   }
 
   return ans;

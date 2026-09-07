@@ -5,8 +5,10 @@
 #include "sherpa-onnx/csrc/offline-sense-voice-model.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #if __ANDROID_API__ >= 9
 #include "android/asset_manager.h"
@@ -32,8 +34,9 @@ class OfflineSenseVoiceModel::Impl {
         env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
-    auto buf = ReadFile(config_.sense_voice.model);
-    Init(buf.data(), buf.size());
+    sess_ = std::make_unique<Ort::Session>(
+        env_, SHERPA_ONNX_TO_ORT_PATH(config_.sense_voice.model), sess_opts_);
+    Init(nullptr, 0);
   }
 
   template <typename Manager>
@@ -61,6 +64,12 @@ class OfflineSenseVoiceModel::Impl {
     return std::move(ans[0]);
   }
 
+  Ort::Value Forward(Ort::Value features) {
+    auto ans = sess_->Run({}, input_names_ptr_.data(), &features, 1,
+                          output_names_ptr_.data(), output_names_ptr_.size());
+    return std::move(ans[0]);
+  }
+
   const OfflineSenseVoiceModelMetaData &GetModelMetadata() const {
     return meta_data_;
   }
@@ -69,8 +78,15 @@ class OfflineSenseVoiceModel::Impl {
 
  private:
   void Init(void *model_data, size_t model_data_length) {
-    sess_ = std::make_unique<Ort::Session>(env_, model_data, model_data_length,
-                                           sess_opts_);
+    if (model_data) {
+      sess_ = std::make_unique<Ort::Session>(
+          env_, model_data, model_data_length, sess_opts_);
+    } else if (!sess_) {
+      SHERPA_ONNX_LOGE(
+          "Please pass model data or initialize the session outside of "
+          "this function");
+      SHERPA_ONNX_EXIT(-1);
+    }
 
     GetInputNames(sess_.get(), &input_names_, &input_names_ptr_);
 
@@ -89,37 +105,47 @@ class OfflineSenseVoiceModel::Impl {
     }
 
     Ort::AllocatorWithDefaultOptions allocator;  // used in the macro below
+
+    std::string comment;
+    SHERPA_ONNX_READ_META_DATA_STR_ALLOW_EMPTY(comment, "comment");
+
+    meta_data_.is_funasr_nano = Contains(comment, "Nano");
+
     SHERPA_ONNX_READ_META_DATA(meta_data_.vocab_size, "vocab_size");
+    SHERPA_ONNX_READ_META_DATA_WITH_DEFAULT(meta_data_.blank_id, "blank_id", 0);
+
     SHERPA_ONNX_READ_META_DATA(meta_data_.window_size, "lfr_window_size");
     SHERPA_ONNX_READ_META_DATA(meta_data_.window_shift, "lfr_window_shift");
     SHERPA_ONNX_READ_META_DATA(meta_data_.normalize_samples,
                                "normalize_samples");
 
-    SHERPA_ONNX_READ_META_DATA(meta_data_.with_itn_id, "with_itn");
+    if (!meta_data_.is_funasr_nano) {
+      SHERPA_ONNX_READ_META_DATA(meta_data_.with_itn_id, "with_itn");
 
-    SHERPA_ONNX_READ_META_DATA(meta_data_.without_itn_id, "without_itn");
+      SHERPA_ONNX_READ_META_DATA(meta_data_.without_itn_id, "without_itn");
 
-    int32_t lang_auto = 0;
-    int32_t lang_zh = 0;
-    int32_t lang_en = 0;
-    int32_t lang_ja = 0;
-    int32_t lang_ko = 0;
-    int32_t lang_yue = 0;
+      int32_t lang_auto = 0;
+      int32_t lang_zh = 0;
+      int32_t lang_en = 0;
+      int32_t lang_ja = 0;
+      int32_t lang_ko = 0;
+      int32_t lang_yue = 0;
 
-    SHERPA_ONNX_READ_META_DATA(lang_auto, "lang_auto");
-    SHERPA_ONNX_READ_META_DATA(lang_zh, "lang_zh");
-    SHERPA_ONNX_READ_META_DATA(lang_en, "lang_en");
-    SHERPA_ONNX_READ_META_DATA(lang_ja, "lang_ja");
-    SHERPA_ONNX_READ_META_DATA(lang_ko, "lang_ko");
-    SHERPA_ONNX_READ_META_DATA(lang_yue, "lang_yue");
+      SHERPA_ONNX_READ_META_DATA(lang_auto, "lang_auto");
+      SHERPA_ONNX_READ_META_DATA(lang_zh, "lang_zh");
+      SHERPA_ONNX_READ_META_DATA(lang_en, "lang_en");
+      SHERPA_ONNX_READ_META_DATA(lang_ja, "lang_ja");
+      SHERPA_ONNX_READ_META_DATA(lang_ko, "lang_ko");
+      SHERPA_ONNX_READ_META_DATA(lang_yue, "lang_yue");
 
-    meta_data_.lang2id = {
-        {"auto", lang_auto}, {"zh", lang_zh}, {"en", lang_en},
-        {"ja", lang_ja},     {"ko", lang_ko}, {"yue", lang_yue},
-    };
+      meta_data_.lang2id = {
+          {"auto", lang_auto}, {"zh", lang_zh}, {"en", lang_en},
+          {"ja", lang_ja},     {"ko", lang_ko}, {"yue", lang_yue},
+      };
 
-    SHERPA_ONNX_READ_META_DATA_VEC_FLOAT(meta_data_.neg_mean, "neg_mean");
-    SHERPA_ONNX_READ_META_DATA_VEC_FLOAT(meta_data_.inv_stddev, "inv_stddev");
+      SHERPA_ONNX_READ_META_DATA_VEC_FLOAT(meta_data_.neg_mean, "neg_mean");
+      SHERPA_ONNX_READ_META_DATA_VEC_FLOAT(meta_data_.inv_stddev, "inv_stddev");
+    }
   }
 
  private:
@@ -155,6 +181,10 @@ Ort::Value OfflineSenseVoiceModel::Forward(Ort::Value features,
                                            Ort::Value text_norm) const {
   return impl_->Forward(std::move(features), std::move(features_length),
                         std::move(language), std::move(text_norm));
+}
+
+Ort::Value OfflineSenseVoiceModel::Forward(Ort::Value features) const {
+  return impl_->Forward(std::move(features));
 }
 
 const OfflineSenseVoiceModelMetaData &OfflineSenseVoiceModel::GetModelMetadata()

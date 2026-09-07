@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
@@ -64,6 +65,32 @@ struct GeneratedAudio {
   GeneratedAudio ScaleSilence(float scale) const;
 };
 
+struct GenerationConfig {
+  float silence_scale = 0.2;
+
+  float speed = 1.0f;  // used only by some models.
+  int32_t sid = 0;     // used only by models support multi-speakers
+
+  std::vector<float> reference_audio;  // mono, [-1, 1]
+  int32_t reference_sample_rate = 0;   // sample rate of reference_audio
+  std::string reference_text;          // not all models require this
+  int32_t num_steps = 5;               // number of steps in flow matching
+
+  // model specific
+  // Please see the Generate method of each model in ./offline-tts-xx-impl.h
+  // e.g., in ./offline-tts-pocket-impl.h
+  std::unordered_map<std::string, std::string> extra;
+
+  std::string GetExtraString(const std::string &key,
+                             const std::string &def = "") const;
+
+  int32_t GetExtraInt(const std::string &key, int32_t def) const;
+
+  float GetExtraFloat(const std::string &key, float def) const;
+
+  std::string ToString() const;
+};
+
 class OfflineTtsImpl;
 
 // If the callback returns 0, then it stops generating
@@ -92,6 +119,7 @@ class OfflineTts {
   //                 keep a reference to it. The caller can copy the data if
   //                 he/she wants to access the samples after the callback
   //                 returns. The callback is called in the current thread.
+  [[deprecated("Use Generate(text, GenerationConfig, callback) instead")]]
   GeneratedAudio Generate(const std::string &text, int64_t sid = 0,
                           float speed = 1.0, bool g2p = false, const std::string &lang = "en-us",
                           GeneratedAudioCallback callback = nullptr) const;
@@ -109,6 +137,7 @@ class OfflineTts {
   //                 keep a reference to it. The caller can copy the data if
   //                 he/she wants to access the samples after the callback
   //                 returns. The callback is called in the current thread.
+  [[deprecated("Use Generate(text, GenerationConfig, callback) instead")]]
   GeneratedAudio Generate(const std::string &text,
                           const std::string &prompt_text,
                           const std::vector<float> &prompt_samples,
@@ -122,6 +151,10 @@ class OfflineTts {
       const std::string &lang = "en-us",
       float exaggeration = 0.5f,
       GeneratedAudioCallback callback = nullptr) const;
+
+  GeneratedAudio Generate(const std::string &text,
+                          const GenerationConfig &config,
+                          GeneratedAudioCallback callback = nullptr) const;
 
   // Return the sample rate of the generated audio
   int32_t SampleRate() const;

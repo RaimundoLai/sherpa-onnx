@@ -12,17 +12,21 @@ endif()
 
 set(sources
   audio-tagging.cc
+  common.cc
   jni.cc
   keyword-spotter.cc
+  offline-diacritization.cc
   offline-punctuation.cc
   offline-recognizer.cc
   offline-speech-denoiser.cc
   offline-stream.cc
+  online-speech-denoiser.cc
   online-punctuation.cc
   online-recognizer.cc
   online-stream.cc
   speaker-embedding-extractor.cc
   speaker-embedding-manager.cc
+  speech-denoiser.cc
   spoken-language-identification.cc
   version.cc
   voice-activity-detector.cc
@@ -46,6 +50,16 @@ add_library(sherpa-onnx-jni SHARED ${sources})
 
 target_compile_definitions(sherpa-onnx-jni PRIVATE SHERPA_ONNX_BUILD_SHARED_LIBS=1)
 target_compile_definitions(sherpa-onnx-jni PRIVATE SHERPA_ONNX_BUILD_MAIN_LIB=1)
+
+if(ANDROID OR (UNIX AND NOT APPLE))
+  set_target_properties(sherpa-onnx-jni PROPERTIES
+    LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/sherpa-onnx-symbols.lds"
+  )
+elseif(APPLE)
+  set_target_properties(sherpa-onnx-jni PROPERTIES
+    LINK_FLAGS "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/sherpa-onnx-symbols.exp"
+  )
+endif()
 
 target_link_libraries(sherpa-onnx-jni sherpa-onnx-core)
 install(TARGETS sherpa-onnx-jni DESTINATION lib)

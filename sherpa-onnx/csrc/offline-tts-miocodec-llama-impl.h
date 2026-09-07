@@ -43,7 +43,7 @@ class OfflineTtsMiocodecLlamaImpl : public OfflineTtsImpl {
     InitFst(config);
   }
 
-  int32_t SampleRate() const override { return 24000; }
+  int32_t SampleRate() const override { return model_->SampleRate(); }
 
   int32_t NumSpeakers() const override {
     // MioCodec-LLaMA is a zero-shot TTS model
@@ -51,7 +51,7 @@ class OfflineTtsMiocodecLlamaImpl : public OfflineTtsImpl {
   }
 
   // Zero-shot TTS with reference audio for speaker embedding.
-  // audio_dir  — path to a 24 kHz reference WAV file for speaker cloning
+  // audio_dir  — path to a reference WAV file for speaker cloning
   // lang       — language code, e.g. "en", "zh", "ja", "ko", "fr", "de", "es"
   // exaggeration — unused (kept for interface compatibility)
   const OfflineTtsConfig &GetConfig() const { return config_; }
@@ -76,16 +76,16 @@ class OfflineTtsMiocodecLlamaImpl : public OfflineTtsImpl {
       return {};
     }
 
-    // Cam++ (16k) and MioCodec (24k)
+    // Cam++ (16k) and MioCodec (model's sample rate)
     std::vector<float> ref_16k = Resample(ref_samples, ref_sr, 16000);
-    std::vector<float> ref_24k = Resample(ref_samples, ref_sr, 24000);
+    std::vector<float> ref_miocodec = Resample(ref_samples, ref_sr, SampleRate());
 
     MiocodecLlamaEmbeddings ans;
     ans.speaker_embedding = model_->ExtractSpeakerEmbedding(
         ref_16k.data(), static_cast<int32_t>(ref_16k.size()));
 
     auto mio_feats = model_->ExtractMiocodecFeatures(
-        ref_24k.data(), static_cast<int32_t>(ref_24k.size()));
+        ref_miocodec.data(), static_cast<int32_t>(ref_miocodec.size()));
     ans.global_embedding = std::move(mio_feats.global_embedding);
 
     return ans;
@@ -213,9 +213,9 @@ class OfflineTtsMiocodecLlamaImpl : public OfflineTtsImpl {
       return {};
     }
 
-    std::vector<float> src_24k = Resample(src_samples, src_sr, 24000);
+    std::vector<float> src_miocodec = Resample(src_samples, src_sr, SampleRate());
     auto mio_feats = model_->ExtractMiocodecFeatures(
-        src_24k.data(), static_cast<int32_t>(src_24k.size()));
+        src_miocodec.data(), static_cast<int32_t>(src_miocodec.size()));
 
     if (mio_feats.content_indices.empty()) {
       SHERPA_ONNX_LOGE("MioCodec-LLaMA VC: extracted no content indices from source.");

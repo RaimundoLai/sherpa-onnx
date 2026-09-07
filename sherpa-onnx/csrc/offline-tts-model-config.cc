@@ -4,6 +4,8 @@
 
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
 
+#include <string>
+
 #include "sherpa-onnx/csrc/macros.h"
 
 namespace sherpa_onnx {
@@ -16,6 +18,8 @@ void OfflineTtsModelConfig::Register(ParseOptions *po) {
   kitten.Register(po);
   chatterbox.Register(po);
   miocodec_llama.Register(po);
+  pocket.Register(po);
+  supertonic.Register(po);
 
   po->Register("num-threads", &num_threads,
                "Number of threads to run the neural network");
@@ -41,7 +45,7 @@ bool OfflineTtsModelConfig::Validate() const {
     return matcha.Validate();
   }
 
-  if (!zipvoice.flow_matching_model.empty()) {
+  if (!zipvoice.decoder.empty()) {
     return zipvoice.Validate();
   }
 
@@ -61,6 +65,14 @@ bool OfflineTtsModelConfig::Validate() const {
     return miocodec_llama.Validate();
   }
 
+  if (!pocket.lm_flow.empty()) {
+    return pocket.Validate();
+  }
+
+  if (!supertonic.tts_json.empty()) {
+    return supertonic.Validate();
+  }
+
   SHERPA_ONNX_LOGE("Please provide exactly one tts model.");
 
   return false;
@@ -77,6 +89,8 @@ std::string OfflineTtsModelConfig::ToString() const {
   os << "kitten=" << kitten.ToString() << ", ";
   os << "chatterbox=" << chatterbox.ToString() << ", ";
   os << "miocodec_llama=" << miocodec_llama.ToString() << ", ";
+  os << "pocket=" << pocket.ToString() << ", ";
+  os << "supertonic=" << supertonic.ToString() << ", ";
   os << "num_threads=" << num_threads << ", ";
   os << "debug=" << (debug ? "True" : "False") << ", ";
   os << "provider=\"" << provider << "\")";

@@ -8,8 +8,10 @@
 
 #include <algorithm>
 #include <cctype>  // std::tolower
-#include <mutex>   // NOLINT
-#include <thread>  // NOLINT
+#include <mutex>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include "portaudio.h"  // NOLINT
 #include "sherpa-onnx/csrc/macros.h"
@@ -120,7 +122,7 @@ for a list of pre-trained models to download.
   po.Read(argc, argv);
   if (po.NumArgs() != 0) {
     po.PrintUsage();
-    exit(EXIT_FAILURE);
+    SHERPA_ONNX_EXIT(EXIT_FAILURE);
   }
 
   fprintf(stderr, "%s\n", config.ToString().c_str());
@@ -141,7 +143,7 @@ for a list of pre-trained models to download.
     fprintf(stderr, "No default input device found\n");
     fprintf(stderr, "If you are using Linux, please switch to \n");
     fprintf(stderr, " ./bin/sherpa-onnx-alsa-offline \n");
-    exit(EXIT_FAILURE);
+    SHERPA_ONNX_EXIT(EXIT_FAILURE);
   }
 
   const char *pDeviceIndex = std::getenv("SHERPA_ONNX_MIC_DEVICE");
@@ -155,14 +157,14 @@ for a list of pre-trained models to download.
   float mic_sample_rate = 16000;
   const char *pSampleRateStr = std::getenv("SHERPA_ONNX_MIC_SAMPLE_RATE");
   if (pSampleRateStr) {
-    fprintf(stderr, "Use sample rate %f for mic\n", mic_sample_rate);
     mic_sample_rate = atof(pSampleRateStr);
+    fprintf(stderr, "Use sample rate %f for mic\n", mic_sample_rate);
   }
 
   if (!mic.OpenDevice(device_index, mic_sample_rate, 1, RecordCallback,
                       nullptr /* user_data */)) {
     fprintf(stderr, "portaudio error: %d\n", device_index);
-    exit(EXIT_FAILURE);
+    SHERPA_ONNX_EXIT(EXIT_FAILURE);
   }
 
   std::thread t(DetectKeyPress);

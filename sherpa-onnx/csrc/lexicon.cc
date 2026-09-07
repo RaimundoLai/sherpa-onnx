@@ -10,8 +10,10 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
-#include <strstream>
+#include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #if __ANDROID_API__ >= 9
 #include "android/asset_manager.h"
@@ -106,12 +108,12 @@ Lexicon::Lexicon(const std::string &lexicon, const std::string &tokens,
   InitLanguage(language);
 
   {
-    std::ifstream is(tokens);
+    auto is = OpenInputFile(tokens);
     InitTokens(is);
   }
 
   {
-    std::ifstream is(lexicon);
+    auto is = OpenInputFile(lexicon);
     InitLexicon(is);
   }
 
@@ -128,13 +130,13 @@ Lexicon::Lexicon(Manager *mgr, const std::string &lexicon,
 
   {
     auto buf = ReadFile(mgr, tokens);
-    std::istrstream is(buf.data(), buf.size());
+    std::istringstream is(std::string(buf.data(), buf.size()));
     InitTokens(is);
   }
 
   {
     auto buf = ReadFile(mgr, lexicon);
-    std::istrstream is(buf.data(), buf.size());
+    std::istringstream is(std::string(buf.data(), buf.size()));
     InitLexicon(is);
   }
 
