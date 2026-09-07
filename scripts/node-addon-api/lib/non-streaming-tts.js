@@ -98,7 +98,6 @@ class OfflineTts {
   convertVoiceWithMiocodecEmbeddingsAsync(obj) {
     return addon.offlineTtsConvertVoiceWithMiocodecEmbeddingsAsync(this.handle, obj);
   }
-  }
 }
 
 
