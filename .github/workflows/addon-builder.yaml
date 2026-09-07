@@ -317,7 +317,7 @@ jobs:
                 -DSHERPA_ONNX_ENABLE_PORTAUDIO=OFF \
                 -DSHERPA_ONNX_ENABLE_BINARY=OFF \
                 ..
-              make -j install
+              make -j2 install
 
       - name: Build sherpa-onnx node-addon
         shell: bash
