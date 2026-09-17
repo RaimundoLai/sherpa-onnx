@@ -93,9 +93,21 @@ function imageToTensor(image, options = {}) {
   };
 }
 
+/**
+ * @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array} TypedArray
+ */
+
+/**
+ * @param {any} value
+ * @returns {value is TypedArray}
+ */
+function isTypedArray(value) {
+  return ArrayBuffer.isView(value) && !(value instanceof DataView);
+}
+
 function readPoint(point) {
   let result;
-  if (Array.isArray(point) || ArrayBuffer.isView(point)) {
+  if (Array.isArray(point) || isTypedArray(point)) {
     if (point.length < 2) throw new TypeError('Each landmark needs x and y');
     result = {x: Number(point[0]), y: Number(point[1]), z: point.length > 2 ? Number(point[2]) : 0};
   } else if (point && typeof point === 'object') {
@@ -110,19 +122,23 @@ function readPoint(point) {
   return result;
 }
 
+/**
+ * @param {any} value
+ * @returns {Array<any> | TypedArray}
+ */
 function unwrapLandmarks(value) {
   if (value && typeof value === 'object' && !Array.isArray(value) &&
-      !ArrayBuffer.isView(value)) {
+      !isTypedArray(value)) {
     const candidate = value.faceLandmarks || value.multiFaceLandmarks || value.landmarks;
     if (Array.isArray(candidate)) {
       // MediaPipe Face Landmarker returns one array per face, while some
       // integrations expose one face directly.
-      value = Array.isArray(candidate[0]) || ArrayBuffer.isView(candidate[0])
+      value = Array.isArray(candidate[0]) || isTypedArray(candidate[0])
         ? candidate[0]
         : candidate;
     }
   }
-  if (!Array.isArray(value) && !ArrayBuffer.isView(value)) {
+  if (!Array.isArray(value) && !isTypedArray(value)) {
     throw new TypeError('MediaPipe landmarks must be an array of points');
   }
   if (value.length === 0) throw new TypeError('MediaPipe landmarks must not be empty');
