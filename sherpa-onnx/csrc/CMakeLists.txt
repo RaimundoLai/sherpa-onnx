@@ -17,6 +17,8 @@ set(sources
   circular-buffer.cc
   context-graph.cc
   endpoint.cc
+  face.cc
+  faster-live-portrait.cc
   features.cc
   file-utils.cc
   fst-utils.cc

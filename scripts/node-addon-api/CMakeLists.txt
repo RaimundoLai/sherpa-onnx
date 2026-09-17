@@ -34,6 +34,8 @@ include_directories(${CMAKE_JS_INC})
 
 set(srcs
   src/audio-tagging.cc
+  src/face.cc
+  src/faster-live-portrait.cc
   src/keyword-spotting.cc
   src/non-streaming-asr.cc
   src/non-streaming-speaker-diarization.cc

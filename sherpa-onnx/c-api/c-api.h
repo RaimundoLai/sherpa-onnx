@@ -4583,6 +4583,224 @@ SherpaOnnxCreateOfflineSourceSeparationOHOS(
 #endif
 
 // ============================================================
+// For face detection and face recognition
+// ============================================================
+
+/**
+ * @brief Raw interleaved image passed to the face APIs.
+ *
+ * The buffer is borrowed for the duration of the call. No image codec is
+ * required by this API. `stride` is in bytes and may be zero for tightly
+ * packed rows. `format` is 0 for RGB, 1 for BGR, 2 for RGBA, and 3 for BGRA.
+ */
+typedef struct SherpaOnnxImage {
+  const uint8_t *data;
+  int32_t width;
+  int32_t height;
+  int32_t channels;
+  int32_t stride;
+  int32_t format;
+} SherpaOnnxImage;
+
+/** @brief One RetinaFace detection in source-image pixel coordinates. */
+typedef struct SherpaOnnxFaceDetection {
+  float score;
+  /** x1, y1, x2, y2. */
+  float bbox[4];
+  /** right eye, left eye, nose, right mouth, left mouth; x/y pairs. */
+  float landmarks[10];
+} SherpaOnnxFaceDetection;
+
+/** @brief Configuration for an ONNX RetinaFace detector. */
+typedef struct SherpaOnnxRetinaFaceConfig {
+  const char *model;
+  int32_t num_threads;
+  int32_t debug;
+  const char *provider;
+  int32_t input_width;
+  int32_t input_height;
+  float score_threshold;
+  float nms_threshold;
+  int32_t max_faces;
+  /** Optional MediaPipe face_landmark_detector.onnx path. */
+  const char *landmark_model;
+} SherpaOnnxRetinaFaceConfig;
+
+/** @brief Opaque RetinaFace detector handle. */
+typedef struct SherpaOnnxRetinaFaceDetector SherpaOnnxRetinaFaceDetector;
+
+/** @brief A snapshot of detections returned by RetinaFace. */
+typedef struct SherpaOnnxFaceDetectionResult {
+  int32_t count;
+  const SherpaOnnxFaceDetection *faces;
+} SherpaOnnxFaceDetectionResult;
+
+/**
+ * @brief Create a RetinaFace detector from an ONNX model.
+ *
+ * The supported ONNX layouts are the common three-output RetinaFace export
+ * (locations, confidences, landmarks) and the nine-output TensorFlow export
+ * used by serengil/retinaface.
+ */
+SHERPA_ONNX_API const SherpaOnnxRetinaFaceDetector *
+SherpaOnnxCreateRetinaFaceDetector(
+    const SherpaOnnxRetinaFaceConfig *config);
+
+/** @brief Destroy a RetinaFace detector. */
+SHERPA_ONNX_API void SherpaOnnxDestroyRetinaFaceDetector(
+    const SherpaOnnxRetinaFaceDetector *detector);
+
+/** @brief Detect faces and landmarks in one raw image. */
+SHERPA_ONNX_API const SherpaOnnxFaceDetectionResult *
+SherpaOnnxRetinaFaceDetectorDetect(
+    const SherpaOnnxRetinaFaceDetector *detector,
+    const SherpaOnnxImage *image);
+
+/** @brief Destroy a detection snapshot. */
+SHERPA_ONNX_API void SherpaOnnxDestroyFaceDetectionResult(
+    const SherpaOnnxFaceDetectionResult *result);
+
+/** @brief Configuration for the AuraFace ONNX embedding model. */
+typedef struct SherpaOnnxAuraFaceConfig {
+  const char *model;
+  int32_t num_threads;
+  int32_t debug;
+  const char *provider;
+  int32_t input_width;
+  int32_t input_height;
+} SherpaOnnxAuraFaceConfig;
+
+/** @brief Opaque AuraFace recognizer handle. */
+typedef struct SherpaOnnxAuraFaceRecognizer SherpaOnnxAuraFaceRecognizer;
+
+/** @brief Create an AuraFace recognizer from an ONNX model. */
+SHERPA_ONNX_API const SherpaOnnxAuraFaceRecognizer *
+SherpaOnnxCreateAuraFaceRecognizer(const SherpaOnnxAuraFaceConfig *config);
+
+/** @brief Destroy an AuraFace recognizer. */
+SHERPA_ONNX_API void SherpaOnnxDestroyAuraFaceRecognizer(
+    const SherpaOnnxAuraFaceRecognizer *recognizer);
+
+/** @brief Return the embedding dimension, normally 512 for glintr100.onnx. */
+SHERPA_ONNX_API int32_t SherpaOnnxAuraFaceRecognizerDim(
+    const SherpaOnnxAuraFaceRecognizer *recognizer);
+
+/**
+ * @brief Compute a normalized AuraFace embedding for one detected face.
+ *
+ * `face` may be NULL, in which case the complete image is used as a crop. If
+ * landmarks are supplied, ArcFace five-point alignment is applied.
+ */
+SHERPA_ONNX_API const float *SherpaOnnxAuraFaceRecognizerComputeEmbedding(
+    const SherpaOnnxAuraFaceRecognizer *recognizer,
+    const SherpaOnnxImage *image, const SherpaOnnxFaceDetection *face);
+
+/** @brief Destroy an embedding returned by ComputeEmbedding. */
+SHERPA_ONNX_API void SherpaOnnxAuraFaceRecognizerDestroyEmbedding(
+    const float *embedding);
+
+/** @brief Compute cosine similarity between two embeddings. */
+SHERPA_ONNX_API float SherpaOnnxFaceCosineSimilarity(const float *a,
+                                                     const float *b,
+                                                     int32_t dim);
+
+// ============================================================
+// For FasterLivePortrait ONNX model sets
+// ============================================================
+
+/** @brief A named ONNX model used by a FasterLivePortrait model set. */
+typedef struct SherpaOnnxFasterLivePortraitModel {
+  /** Logical name, e.g. "appearanceFeatureExtractor". */
+  const char *name;
+  /** Path to the ONNX model. */
+  const char *path;
+} SherpaOnnxFasterLivePortraitModel;
+
+/** @brief Configuration for a FasterLivePortrait ONNX model set. */
+typedef struct SherpaOnnxFasterLivePortraitConfig {
+  const SherpaOnnxFasterLivePortraitModel *models;
+  int32_t num_models;
+  int32_t num_threads;
+  /** cpu, cuda, coreml, and other providers supported by this build. */
+  const char *provider;
+  int32_t debug;
+} SherpaOnnxFasterLivePortraitConfig;
+
+/** @brief Opaque FasterLivePortrait ONNX model-set handle. */
+typedef struct SherpaOnnxFasterLivePortraitModelSet
+    SherpaOnnxFasterLivePortraitModelSet;
+
+/**
+ * @brief A tensor passed to or returned from a FasterLivePortrait graph.
+ *
+ * `type` uses the following values: 1=float32, 2=float16 (raw IEEE-754
+ * half bits in uint16 storage), 3=int64, 4=int32, 5=uint8, 6=bool.
+ * Input data and shape are borrowed for the duration of a Run() call.
+ */
+typedef struct SherpaOnnxFasterLivePortraitTensor {
+  const char *name;
+  int32_t type;
+  const int64_t *shape;
+  int32_t rank;
+  const void *data;
+  int64_t element_count;
+} SherpaOnnxFasterLivePortraitTensor;
+
+/** @brief A snapshot of tensors returned by one model invocation. */
+typedef struct SherpaOnnxFasterLivePortraitResult {
+  int32_t count;
+  const SherpaOnnxFasterLivePortraitTensor *tensors;
+} SherpaOnnxFasterLivePortraitResult;
+
+/** @brief Create a model set and load every configured ONNX graph. */
+SHERPA_ONNX_API const SherpaOnnxFasterLivePortraitModelSet *
+SherpaOnnxCreateFasterLivePortraitModelSet(
+    const SherpaOnnxFasterLivePortraitConfig *config);
+
+/** @brief Destroy a FasterLivePortrait model set. */
+SHERPA_ONNX_API void SherpaOnnxDestroyFasterLivePortraitModelSet(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set);
+
+/**
+ * @brief Return model names, I/O names, types, and shapes as a JSON string.
+ *
+ * The returned string must be freed with
+ * SherpaOnnxFasterLivePortraitFreeString().
+ */
+SHERPA_ONNX_API const char *SherpaOnnxFasterLivePortraitGetModelInfoJson(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set);
+
+/** @brief Free a string returned by a FasterLivePortrait API. */
+SHERPA_ONNX_API void SherpaOnnxFasterLivePortraitFreeString(const char *value);
+
+/**
+ * @brief Run one named ONNX graph.
+ *
+ * Inputs may be supplied in model order with `name == NULL`, or by matching
+ * the names returned from GetModelInfoJson(). The result is owned by the
+ * caller and must be freed with SherpaOnnxDestroyFasterLivePortraitResult().
+ */
+SHERPA_ONNX_API const SherpaOnnxFasterLivePortraitResult *
+SherpaOnnxFasterLivePortraitRun(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set,
+    const char *model_name,
+    const SherpaOnnxFasterLivePortraitTensor *inputs,
+    int32_t num_inputs);
+
+/** @brief Destroy a result returned by FasterLivePortraitRun(). */
+SHERPA_ONNX_API void SherpaOnnxDestroyFasterLivePortraitResult(
+    const SherpaOnnxFasterLivePortraitResult *result);
+
+/** @brief Return the number of output tensors in a result. */
+SHERPA_ONNX_API int32_t SherpaOnnxFasterLivePortraitResultGetCount(
+    const SherpaOnnxFasterLivePortraitResult *result);
+
+/** @brief Return one output tensor from a result, or NULL on invalid index. */
+SHERPA_ONNX_API const SherpaOnnxFasterLivePortraitTensor *
+SherpaOnnxFasterLivePortraitResultGetTensor(
+    const SherpaOnnxFasterLivePortraitResult *result, int32_t index);
+
+// ============================================================
 // For diacritization
 // ============================================================
 

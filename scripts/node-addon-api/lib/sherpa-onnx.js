@@ -20,6 +20,10 @@ const sd = require('./non-streaming-speaker-diarization.js');
 const speech_denoiser = require('./non-streaming-speech-denoiser.js');
 const online_speech_denoiser = require('./online-speech-denoiser.js');
 const resampler = require('./resampler.js');
+const face = require('./face.js');
+const faster_live_portrait = require('./faster-live-portrait.js');
+const joyvasa = require('./joyvasa.js');
+const talking_video = require('./talking-video.js');
 
 module.exports = {
   OnlineRecognizer : streaming_asr.OnlineRecognizer,
@@ -42,6 +46,20 @@ module.exports = {
   OfflineSpeechDenoiser : speech_denoiser.OfflineSpeechDenoiser,
   OnlineSpeechDenoiser : online_speech_denoiser.OnlineSpeechDenoiser,
   LinearResampler : resampler.LinearResampler,
+  FaceDetector : face.FaceDetector,
+  // Deprecated compatibility alias. The default bundle uses MediaPipe,
+  // not RetinaFace.
+  RetinaFaceDetector : face.RetinaFaceDetector,
+  AuraFaceRecognizer : face.AuraFaceRecognizer,
+  FaceIdentityTracker : face.FaceIdentityTracker,
+  faceCosineSimilarity : face.faceCosineSimilarity,
+  faceSamePerson : face.faceSamePerson,
+  FasterLivePortrait : faster_live_portrait.FasterLivePortrait,
+  MediaPipeLandmarks : faster_live_portrait.MediaPipeLandmarks,
+  imageToTensor : faster_live_portrait.imageToTensor,
+  mediaPipeLandmarksToTensor : faster_live_portrait.mediaPipeLandmarksToTensor,
+  JoyVASA : joyvasa.JoyVASA,
+  renderTalkingVideo : talking_video.renderTalkingVideo,
   version : addon.version,
   gitSha1 : addon.gitSha1,
   gitDate : addon.gitDate,

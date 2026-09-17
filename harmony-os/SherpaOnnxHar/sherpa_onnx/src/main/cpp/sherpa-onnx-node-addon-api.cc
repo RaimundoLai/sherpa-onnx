@@ -37,6 +37,10 @@ void InitVersion(Napi::Env env, Napi::Object exports);
 
 void InitResampler(Napi::Env env, Napi::Object exports);
 
+void InitFace(Napi::Env env, Napi::Object exports);
+
+void InitFasterLivePortrait(Napi::Env env, Napi::Object exports);
+
 #if __OHOS__
 void InitUtils(Napi::Env env, Napi::Object exports);
 #endif
@@ -59,6 +63,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitOnlineSpeechDenoiser(env, exports);
   InitVersion(env, exports);
   InitResampler(env, exports);
+  InitFace(env, exports);
+  InitFasterLivePortrait(env, exports);
 
 #if __OHOS__
   InitUtils(env, exports);

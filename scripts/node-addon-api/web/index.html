@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sherpa-ONNX Talking Video Test</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { max-width: 880px; margin: 0 auto; padding: 28px; background: #15171a; color: #f4f5f6; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { color: #b6bdc7; line-height: 1.55; }
+    .panel { padding: 20px; border: 1px solid #30343a; border-radius: 14px; background: #1e2126; }
+    label { display: block; margin: 14px 0 7px; color: #d9dee5; }
+    input[type=file], input[type=number], select { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #424851; border-radius: 8px; background: #111317; color: #f4f5f6; }
+    input[type=number] { width: 140px; }
+    button { margin-top: 18px; padding: 10px 16px; border: 0; border-radius: 8px; background: #5b8cff; color: white; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 20px; }
+    .grid > div { min-width: 0; }
+    img, video { display: block; width: 100%; border-radius: 10px; background: #0b0c0e; }
+    img { min-height: 120px; object-fit: contain; }
+    video { margin-top: 8px; }
+    pre { white-space: pre-wrap; margin: 16px 0 0; color: #9fe3af; }
+    a { color: #9fc0ff; }
+    @media (max-width: 700px) { body { padding: 16px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Sherpa-ONNX Talking Video Test</h1>
+  <p>選擇一張人像與一段語音。兩種 backend 都使用 MediaPipe 找臉，並以 AuraFace embedding 做身份比對；ONNX 路徑保留原有 Node addon，MLX 路徑在 Apple Silicon 上使用 MLX/Metal 逐幀渲染。MLX 預設沿用 ONNX motion 以維持嘴型品質。輸出長邊預設限制為 512px。</p>
+  <div class="panel">
+    <label for="image">輸入圖片</label>
+    <input id="image" type="file" accept="image/*" required>
+    <label for="audio">輸入音訊</label>
+    <input id="audio" type="file" accept="audio/*" required>
+    <label for="backend">執行 backend</label>
+    <select id="backend">
+      <option value="onnx" selected>ONNX Runtime（原有架構）</option>
+      <option value="mlx">MLX/Metal（Apple Silicon，需設定 runtime）</option>
+    </select>
+    <label for="profile">模型版本</label>
+    <select id="profile">
+      <option value="original" selected>原版（品質基準，預設）</option>
+      <option value="metal">Metal/CoreML FP16（需配置獨立模型）</option>
+    </select>
+    <label for="mlxProfile">MLX 精度</label>
+    <select id="mlxProfile">
+      <option value="quality" selected>品質優先（FP32）</option>
+      <option value="fast">速度優先（BF16）</option>
+    </select>
+    <label for="mlxMotionBackend">MLX motion 來源</label>
+    <select id="mlxMotionBackend">
+      <option value="onnx" selected>ONNX motion + MLX/Metal 渲染（推薦）</option>
+      <option value="mlx">純 MLX motion（實驗）</option>
+    </select>
+    <label for="maxSeconds">最長秒數（0 = 完整音訊；填數字才會截斷）</label>
+    <input id="maxSeconds" type="number" min="0" step="1" value="0">
+    <label for="diffusionSteps">JoyVASA diffusion steps（50 = 品質；20 = 較快）</label>
+    <input id="diffusionSteps" type="number" min="1" max="50" step="1" value="50">
+    <label for="maxDimension">輸出長邊上限（512 = 較快；0 = 保留原尺寸）</label>
+    <input id="maxDimension" type="number" min="0" step="2" value="512">
+    <label for="outputFps">輸出 FPS（25 = 流暢；12.5 = 約快一倍）</label>
+    <input id="outputFps" type="number" min="1" max="25" step="0.5" value="25">
+    <button id="generate">產生影片</button>
+    <pre id="status">等待輸入圖片與音訊。</pre>
+  </div>
+  <div class="grid">
+    <div>
+      <p>圖片預覽</p>
+      <img id="imagePreview" alt="source preview">
+    </div>
+    <div>
+      <p>輸出影片</p>
+      <video id="video" controls></video>
+      <p><a id="download" hidden download="sherpa-onnx-talking.mp4">下載 MP4</a></p>
+    </div>
+  </div>
+  <script>
+    const imageInput = document.getElementById('image');
+    const audioInput = document.getElementById('audio');
+    const backendInput = document.getElementById('backend');
+    const profileInput = document.getElementById('profile');
+    const mlxProfileInput = document.getElementById('mlxProfile');
+    const mlxMotionBackendInput = document.getElementById('mlxMotionBackend');
+    const maxSecondsInput = document.getElementById('maxSeconds');
+    const diffusionStepsInput = document.getElementById('diffusionSteps');
+    const maxDimensionInput = document.getElementById('maxDimension');
+    const outputFpsInput = document.getElementById('outputFps');
+    const generateButton = document.getElementById('generate');
+    const status = document.getElementById('status');
+    const preview = document.getElementById('imagePreview');
+    const video = document.getElementById('video');
+    const download = document.getElementById('download');
+    const apiOrigin = location.protocol === 'file:' ? 'http://127.0.0.1:8787' : '';
+
+    function updateBackendControls() {
+      const mlx = backendInput.value === 'mlx';
+      profileInput.disabled = mlx;
+      mlxProfileInput.disabled = !mlx;
+      mlxMotionBackendInput.disabled = !mlx;
+      diffusionStepsInput.disabled = mlx;
+      if (mlx) diffusionStepsInput.value = '50';
+    }
+    backendInput.addEventListener('change', updateBackendControls);
+    updateBackendControls();
+
+    if (location.protocol === 'file:') {
+      status.textContent = '目前是直接開啟 file://；請先啟動 Node server，頁面會自動連到 http://127.0.0.1:8787。';
+    }
+
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files[0];
+      if (file) preview.src = URL.createObjectURL(file);
+    });
+
+    function toBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+      }
+      return btoa(binary);
+    }
+
+    generateButton.addEventListener('click', async () => {
+      const image = imageInput.files[0];
+      const audio = audioInput.files[0];
+      if (!image || !audio) {
+        status.textContent = '請先選擇圖片與音訊。';
+        return;
+      }
+      generateButton.disabled = true;
+      download.hidden = true;
+      video.removeAttribute('src');
+      video.load();
+      status.textContent = backendInput.value === 'mlx'
+        ? '上傳素材並執行 MLX/Metal（預設 ONNX motion + MLX 渲染），請稍候；首次執行會載入 Python/MLX runtime……'
+        : '上傳素材並執行 ONNX（macOS 預設使用 CoreML/Metal），請稍候；首次執行會建立並快取模型……';
+      try {
+        const body = {
+          image: {name: image.name, type: image.type, data: toBase64(await image.arrayBuffer())},
+          audio: {name: audio.name, type: audio.type, data: toBase64(await audio.arrayBuffer())},
+          backend: backendInput.value,
+          profile: profileInput.value,
+          mlxProfile: mlxProfileInput.value,
+          mlxMotionBackend: mlxMotionBackendInput.value,
+          maxSeconds: Number(maxSecondsInput.value || 0),
+          diffusionSteps: Number(diffusionStepsInput.value || 50),
+          maxDimension: Number(maxDimensionInput.value || 0),
+          outputFps: Number(outputFpsInput.value || 25),
+        };
+        const response = await fetch(`${apiOrigin}/api/generate`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+        video.src = `${apiOrigin}${result.url}`;
+        video.load();
+        download.href = `${apiOrigin}${result.url}`;
+        download.hidden = false;
+        status.textContent = `完成：${result.width}x${result.height} / ${result.frames} frames / ${result.fps} FPS / ${result.duration.toFixed(2)} 秒 / backend=${result.backend || 'onnx'} / profile=${result.profile} / precision=${result.precision || 'n/a'} / motion=${result.motionBackend || 'onnx'} / provider=${result.provider} / diffusion=${result.diffusionSteps}。`;
+      } catch (error) {
+        status.textContent = `失敗：${error.message}`;
+      } finally {
+        generateButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

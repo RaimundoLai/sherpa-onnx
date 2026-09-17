@@ -281,6 +281,107 @@ static Napi::Float32Array SpeakerEmbeddingExtractorComputeEmbeddingWrapper(
   }
 }
 
+class ComputeSpeakerEmbeddingWorker : public Napi::AsyncWorker {
+ public:
+  ComputeSpeakerEmbeddingWorker(
+      const Napi::Env &env,
+      const SherpaOnnxSpeakerEmbeddingExtractor *extractor,
+      const SherpaOnnxOnlineStream *stream, bool enable_external_buffer)
+      : Napi::AsyncWorker(env, "ComputeSpeakerEmbeddingWorker"),
+        deferred_(env),
+        extractor_(extractor),
+        stream_(stream),
+        enable_external_buffer_(enable_external_buffer) {}
+
+  Napi::Promise Promise() { return deferred_.Promise(); }
+
+ protected:
+  void Execute() override {
+    v_ = SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding(extractor_,
+                                                             stream_);
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (!v_) {
+      deferred_.Reject(
+          Napi::Error::New(env, "Failed to compute speaker embedding").Value());
+      return;
+    }
+
+    int32_t dim = SherpaOnnxSpeakerEmbeddingExtractorDim(extractor_);
+    if (enable_external_buffer_) {
+      Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
+          env, const_cast<float *>(v_), sizeof(float) * dim,
+          [](Napi::Env /*env*/, void *data) {
+            SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding(
+                reinterpret_cast<float *>(data));
+          });
+      deferred_.Resolve(Napi::Float32Array::New(env, dim, arrayBuffer, 0));
+    } else {
+      Napi::ArrayBuffer arrayBuffer =
+          Napi::ArrayBuffer::New(env, sizeof(float) * dim);
+      Napi::Float32Array float32Array =
+          Napi::Float32Array::New(env, dim, arrayBuffer, 0);
+      std::copy(v_, v_ + dim, float32Array.Data());
+      SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding(v_);
+      deferred_.Resolve(float32Array);
+    }
+  }
+
+ private:
+  Napi::Promise::Deferred deferred_;
+  const SherpaOnnxSpeakerEmbeddingExtractor *extractor_ = nullptr;
+  const SherpaOnnxOnlineStream *stream_ = nullptr;
+  bool enable_external_buffer_ = true;
+  const float *v_ = nullptr;
+};
+
+static Napi::Value SpeakerEmbeddingExtractorComputeEmbeddingAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() != 2 && info.Length() != 3) {
+    std::ostringstream os;
+    os << "Expect only 2 or 3 arguments. Given: " << info.Length();
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsExternal()) {
+    Napi::TypeError::New(
+        env, "Argument 0 should be a speaker embedding extractor pointer.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[1].IsExternal()) {
+    Napi::TypeError::New(env, "Argument 1 should be an online stream pointer.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  bool enable_external_buffer = true;
+  if (info.Length() == 3) {
+    if (info[2].IsBoolean()) {
+      enable_external_buffer = info[2].As<Napi::Boolean>().Value();
+    } else {
+      Napi::TypeError::New(env, "Argument 2 should be a boolean.")
+          .ThrowAsJavaScriptException();
+      return env.Null();
+    }
+  }
+
+  const SherpaOnnxSpeakerEmbeddingExtractor *extractor =
+      info[0].As<Napi::External<SherpaOnnxSpeakerEmbeddingExtractor>>().Data();
+  const SherpaOnnxOnlineStream *stream =
+      info[1].As<Napi::External<SherpaOnnxOnlineStream>>().Data();
+
+  auto *worker = new ComputeSpeakerEmbeddingWorker(
+      env, extractor, stream, enable_external_buffer);
+  worker->Queue();
+  return worker->Promise();
+}
+
 static Napi::External<SherpaOnnxSpeakerEmbeddingManager>
 CreateSpeakerEmbeddingManagerWrapper(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -960,6 +1061,11 @@ void InitSpeakerID(Napi::Env env, Napi::Object exports) {
       Napi::String::New(env, "speakerEmbeddingExtractorComputeEmbedding"),
       Napi::Function::New(env,
                           SpeakerEmbeddingExtractorComputeEmbeddingWrapper));
+
+  exports.Set(
+      Napi::String::New(env, "speakerEmbeddingExtractorComputeEmbeddingAsync"),
+      Napi::Function::New(
+          env, SpeakerEmbeddingExtractorComputeEmbeddingAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "createSpeakerEmbeddingManager"),
               Napi::Function::New(env, CreateSpeakerEmbeddingManagerWrapper));
