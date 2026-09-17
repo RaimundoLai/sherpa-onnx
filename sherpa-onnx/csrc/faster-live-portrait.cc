@@ -12,9 +12,11 @@
 #include <vector>
 
 #include "onnxruntime_cxx_api.h"  // NOLINT
+#include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
 #include "sherpa-onnx/csrc/session.h"
+#include "sherpa-onnx/csrc/text-utils.h"
 
 namespace sherpa_onnx {
 namespace {
@@ -190,14 +192,15 @@ class FasterLivePortraitModelSet::Impl {
       auto model = std::make_unique<ModelSession>();
       model->info.name = model_config.name;
       model->info.path = model_config.path;
-      // CoreML's provider factory may use ONNX Runtime's default logger while
-      // appending the execution provider. Initialize the shared ORT
-      // environment before creating SessionOptions so CoreML does not access
-      // an unregistered logger.
+      if (!FileExists(model_config.path)) {
+        throw std::invalid_argument("FasterLivePortrait model '" +
+                                    model_config.name + "' does not exist: " +
+                                    model_config.path);
+      }
       auto &ort_env = GetOrtEnv();
       auto options = GetSessionOptions(num_threads, provider);
       model->session = std::make_unique<Ort::Session>(
-          ort_env, model_config.path.c_str(), options);
+          ort_env, SHERPA_ONNX_TO_ORT_PATH(model_config.path), options);
       GetInputNames(model->session.get(), &model->input_names,
                     &model->input_names_ptr);
       GetOutputNames(model->session.get(), &model->output_names,
