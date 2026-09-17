@@ -6,6 +6,7 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +22,8 @@
 #include "sherpa-onnx/csrc/audio-tagging.h"
 #include "sherpa-onnx/csrc/circular-buffer.h"
 #include "sherpa-onnx/csrc/display.h"
+#include "sherpa-onnx/csrc/face.h"
+#include "sherpa-onnx/csrc/faster-live-portrait.h"
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/keyword-spotter.h"
 #include "sherpa-onnx/csrc/macros.h"
@@ -3905,6 +3908,394 @@ SherpaOnnxCreateOfflineSourceSeparationOHOS(
 }
 
 #endif  // #ifdef __OHOS__
+
+struct SherpaOnnxRetinaFaceDetector {
+  std::unique_ptr<sherpa_onnx::RetinaFaceDetector> impl;
+};
+
+struct SherpaOnnxFaceDetectionResultInternal
+    : SherpaOnnxFaceDetectionResult {
+  std::vector<SherpaOnnxFaceDetection> storage;
+};
+
+static sherpa_onnx::ImageView GetImageView(const SherpaOnnxImage *image) {
+  if (!image) {
+    throw std::invalid_argument("Image must not be null");
+  }
+  if (image->format < 0 || image->format > 3) {
+    throw std::invalid_argument("Image format must be 0, 1, 2 or 3");
+  }
+  sherpa_onnx::ImageView view;
+  view.data = image->data;
+  view.width = image->width;
+  view.height = image->height;
+  view.channels = image->channels;
+  view.stride = image->stride;
+  view.format = static_cast<sherpa_onnx::ImageFormat>(image->format);
+  if (!view.IsValid()) {
+    throw std::invalid_argument("Invalid image dimensions, format or stride");
+  }
+  return view;
+}
+
+const SherpaOnnxRetinaFaceDetector *SherpaOnnxCreateRetinaFaceDetector(
+    const SherpaOnnxRetinaFaceConfig *config) {
+  if (!config) return nullptr;
+  sherpa_onnx::RetinaFaceConfig c;
+  c.model = SHERPA_ONNX_OR(config->model, "");
+  c.landmark_model = SHERPA_ONNX_OR(config->landmark_model, "");
+  c.num_threads = GetNumThreads(config->num_threads);
+  c.debug = config->debug != 0;
+  c.provider = SHERPA_ONNX_OR(config->provider, "cpu");
+  if (c.provider.empty()) c.provider = "cpu";
+  c.input_width = SHERPA_ONNX_OR(config->input_width, 640);
+  c.input_height = SHERPA_ONNX_OR(config->input_height, 640);
+  c.score_threshold = config->score_threshold > 0
+                          ? config->score_threshold
+                          : 0.5f;
+  c.nms_threshold = config->nms_threshold > 0 ? config->nms_threshold : 0.4f;
+  c.max_faces = std::max<int32_t>(0, config->max_faces);
+  try {
+    auto *detector = new SherpaOnnxRetinaFaceDetector;
+    detector->impl =
+        std::make_unique<sherpa_onnx::RetinaFaceDetector>(c);
+    return detector;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Failed to create RetinaFace detector: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxDestroyRetinaFaceDetector(
+    const SherpaOnnxRetinaFaceDetector *detector) {
+  delete detector;
+}
+
+const SherpaOnnxFaceDetectionResult *SherpaOnnxRetinaFaceDetectorDetect(
+    const SherpaOnnxRetinaFaceDetector *detector,
+    const SherpaOnnxImage *image) {
+  if (!detector || !detector->impl) return nullptr;
+  try {
+    auto faces = detector->impl->Detect(GetImageView(image));
+    auto *result = new SherpaOnnxFaceDetectionResultInternal;
+    result->storage.resize(faces.size());
+    for (size_t i = 0; i != faces.size(); ++i) {
+      result->storage[i].score = faces[i].score;
+      std::copy(std::begin(faces[i].bbox), std::end(faces[i].bbox),
+                result->storage[i].bbox);
+      std::copy(std::begin(faces[i].landmarks),
+                std::end(faces[i].landmarks), result->storage[i].landmarks);
+    }
+    result->count = static_cast<int32_t>(result->storage.size());
+    result->faces = result->storage.data();
+    return result;
+  } catch (const std::exception &e) {
+    // The ABI keeps the historical RetinaFace symbol name, but the
+    // implementation also accepts MediaPipe and SCRFD graphs.  Keep the
+    // runtime diagnostic generic so a MediaPipe output-shape error is not
+    // incorrectly reported as a RetinaFace failure.
+    SHERPA_ONNX_LOGE("Face detector detection failed: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxDestroyFaceDetectionResult(
+    const SherpaOnnxFaceDetectionResult *result) {
+  delete static_cast<const SherpaOnnxFaceDetectionResultInternal *>(result);
+}
+
+struct SherpaOnnxAuraFaceRecognizer {
+  std::unique_ptr<sherpa_onnx::AuraFaceRecognizer> impl;
+};
+
+const SherpaOnnxAuraFaceRecognizer *SherpaOnnxCreateAuraFaceRecognizer(
+    const SherpaOnnxAuraFaceConfig *config) {
+  if (!config) return nullptr;
+  sherpa_onnx::AuraFaceConfig c;
+  c.model = SHERPA_ONNX_OR(config->model, "");
+  c.num_threads = GetNumThreads(config->num_threads);
+  c.debug = config->debug != 0;
+  c.provider = SHERPA_ONNX_OR(config->provider, "cpu");
+  if (c.provider.empty()) c.provider = "cpu";
+  c.input_width = SHERPA_ONNX_OR(config->input_width, 112);
+  c.input_height = SHERPA_ONNX_OR(config->input_height, 112);
+  try {
+    auto *recognizer = new SherpaOnnxAuraFaceRecognizer;
+    recognizer->impl = std::make_unique<sherpa_onnx::AuraFaceRecognizer>(c);
+    return recognizer;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Failed to create AuraFace recognizer: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxDestroyAuraFaceRecognizer(
+    const SherpaOnnxAuraFaceRecognizer *recognizer) {
+  delete recognizer;
+}
+
+int32_t SherpaOnnxAuraFaceRecognizerDim(
+    const SherpaOnnxAuraFaceRecognizer *recognizer) {
+  return recognizer && recognizer->impl ? recognizer->impl->Dim() : 0;
+}
+
+const float *SherpaOnnxAuraFaceRecognizerComputeEmbedding(
+    const SherpaOnnxAuraFaceRecognizer *recognizer,
+    const SherpaOnnxImage *image, const SherpaOnnxFaceDetection *face) {
+  if (!recognizer || !recognizer->impl) return nullptr;
+  try {
+    sherpa_onnx::FaceDetection native_face;
+    const sherpa_onnx::FaceDetection *native_face_ptr = nullptr;
+    if (face) {
+      native_face.score = face->score;
+      std::copy(std::begin(face->bbox), std::end(face->bbox),
+                native_face.bbox);
+      std::copy(std::begin(face->landmarks), std::end(face->landmarks),
+                native_face.landmarks);
+      native_face_ptr = &native_face;
+    }
+    auto embedding =
+        recognizer->impl->Compute(GetImageView(image), native_face_ptr);
+    auto *result = new float[embedding.size()];
+    std::copy(embedding.begin(), embedding.end(), result);
+    return result;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("AuraFace embedding failed: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxAuraFaceRecognizerDestroyEmbedding(const float *embedding) {
+  delete[] embedding;
+}
+
+float SherpaOnnxFaceCosineSimilarity(const float *a, const float *b,
+                                     int32_t dim) {
+  return sherpa_onnx::CosineSimilarity(a, b, dim);
+}
+
+namespace {
+
+sherpa_onnx::FasterLivePortraitTensorType
+GetFasterLivePortraitTensorType(int32_t type) {
+  switch (type) {
+    case 1:
+      return sherpa_onnx::FasterLivePortraitTensorType::kFloat32;
+    case 2:
+      return sherpa_onnx::FasterLivePortraitTensorType::kFloat16;
+    case 3:
+      return sherpa_onnx::FasterLivePortraitTensorType::kInt64;
+    case 4:
+      return sherpa_onnx::FasterLivePortraitTensorType::kInt32;
+    case 5:
+      return sherpa_onnx::FasterLivePortraitTensorType::kUint8;
+    case 6:
+      return sherpa_onnx::FasterLivePortraitTensorType::kBool;
+    default:
+      throw std::invalid_argument(
+          "Unsupported FasterLivePortrait tensor type; expected 1..6");
+  }
+}
+
+const char *FasterLivePortraitTensorTypeName(
+    sherpa_onnx::FasterLivePortraitTensorType type) {
+  switch (type) {
+    case sherpa_onnx::FasterLivePortraitTensorType::kFloat32:
+      return "float32";
+    case sherpa_onnx::FasterLivePortraitTensorType::kFloat16:
+      return "float16";
+    case sherpa_onnx::FasterLivePortraitTensorType::kInt64:
+      return "int64";
+    case sherpa_onnx::FasterLivePortraitTensorType::kInt32:
+      return "int32";
+    case sherpa_onnx::FasterLivePortraitTensorType::kUint8:
+      return "uint8";
+    case sherpa_onnx::FasterLivePortraitTensorType::kBool:
+      return "bool";
+    default:
+      return "unknown";
+  }
+}
+
+size_t FasterLivePortraitTensorTypeSize(
+    sherpa_onnx::FasterLivePortraitTensorType type) {
+  switch (type) {
+    case sherpa_onnx::FasterLivePortraitTensorType::kFloat32:
+      return sizeof(float);
+    case sherpa_onnx::FasterLivePortraitTensorType::kFloat16:
+      return sizeof(uint16_t);
+    case sherpa_onnx::FasterLivePortraitTensorType::kInt64:
+      return sizeof(int64_t);
+    case sherpa_onnx::FasterLivePortraitTensorType::kInt32:
+      return sizeof(int32_t);
+    case sherpa_onnx::FasterLivePortraitTensorType::kUint8:
+    case sherpa_onnx::FasterLivePortraitTensorType::kBool:
+      return sizeof(uint8_t);
+    default:
+      throw std::invalid_argument("Unsupported FasterLivePortrait tensor type");
+  }
+}
+
+}  // namespace
+
+struct SherpaOnnxFasterLivePortraitModelSet {
+  std::unique_ptr<sherpa_onnx::FasterLivePortraitModelSet> impl;
+};
+
+struct SherpaOnnxFasterLivePortraitResultInternal
+    : SherpaOnnxFasterLivePortraitResult {
+  std::vector<SherpaOnnxFasterLivePortraitTensor> storage;
+  std::vector<std::string> names;
+  std::vector<std::vector<int64_t>> shapes;
+  std::vector<std::vector<uint8_t>> data;
+};
+
+const SherpaOnnxFasterLivePortraitModelSet *
+SherpaOnnxCreateFasterLivePortraitModelSet(
+    const SherpaOnnxFasterLivePortraitConfig *config) {
+  if (!config || config->num_models <= 0 || !config->models) return nullptr;
+  sherpa_onnx::FasterLivePortraitConfig c;
+  c.num_threads = GetNumThreads(config->num_threads);
+  c.provider = SHERPA_ONNX_OR(config->provider, "cpu");
+  c.debug = config->debug != 0;
+  c.models.reserve(config->num_models);
+  for (int32_t i = 0; i != config->num_models; ++i) {
+    sherpa_onnx::FasterLivePortraitModelConfig model;
+    model.name = SHERPA_ONNX_OR(config->models[i].name, "");
+    model.path = SHERPA_ONNX_OR(config->models[i].path, "");
+    c.models.push_back(std::move(model));
+  }
+  try {
+    auto *model_set = new SherpaOnnxFasterLivePortraitModelSet;
+    model_set->impl = std::make_unique<sherpa_onnx::FasterLivePortraitModelSet>(c);
+    return model_set;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Failed to create FasterLivePortrait model set: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxDestroyFasterLivePortraitModelSet(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set) {
+  delete model_set;
+}
+
+const char *SherpaOnnxFasterLivePortraitGetModelInfoJson(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set) {
+  if (!model_set || !model_set->impl) return nullptr;
+  try {
+    nlohmann::json root;
+    root["models"] = nlohmann::json::array();
+    for (const auto &model : model_set->impl->GetModelInfos()) {
+      nlohmann::json item;
+      item["name"] = model.name;
+      item["path"] = model.path;
+      item["inputs"] = nlohmann::json::array();
+      item["outputs"] = nlohmann::json::array();
+      for (const auto &tensor : model.inputs) {
+        nlohmann::json value;
+        value["name"] = tensor.name;
+        value["type"] = FasterLivePortraitTensorTypeName(tensor.type);
+        value["typeId"] = static_cast<int32_t>(tensor.type);
+        value["shape"] = tensor.shape;
+        item["inputs"].push_back(std::move(value));
+      }
+      for (const auto &tensor : model.outputs) {
+        nlohmann::json value;
+        value["name"] = tensor.name;
+        value["type"] = FasterLivePortraitTensorTypeName(tensor.type);
+        value["typeId"] = static_cast<int32_t>(tensor.type);
+        value["shape"] = tensor.shape;
+        item["outputs"].push_back(std::move(value));
+      }
+      root["models"].push_back(std::move(item));
+    }
+    const std::string value = root.dump();
+    auto *result = new char[value.size() + 1];
+    std::memcpy(result, value.c_str(), value.size() + 1);
+    return result;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("Failed to inspect FasterLivePortrait models: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxFasterLivePortraitFreeString(const char *value) {
+  delete[] value;
+}
+
+const SherpaOnnxFasterLivePortraitResult *SherpaOnnxFasterLivePortraitRun(
+    const SherpaOnnxFasterLivePortraitModelSet *model_set,
+    const char *model_name,
+    const SherpaOnnxFasterLivePortraitTensor *inputs,
+    int32_t num_inputs) {
+  if (!model_set || !model_set->impl || !model_name || num_inputs < 0 ||
+      (num_inputs > 0 && !inputs)) {
+    return nullptr;
+  }
+  try {
+    std::vector<sherpa_onnx::FasterLivePortraitTensorInput> native_inputs;
+    native_inputs.reserve(num_inputs);
+    for (int32_t i = 0; i != num_inputs; ++i) {
+      if (inputs[i].rank < 0 || inputs[i].element_count < 0 ||
+          (inputs[i].rank > 0 && !inputs[i].shape)) {
+        throw std::invalid_argument("Invalid FasterLivePortrait input tensor");
+      }
+      sherpa_onnx::FasterLivePortraitTensorInput input;
+      input.name = SHERPA_ONNX_OR(inputs[i].name, "");
+      input.type = GetFasterLivePortraitTensorType(inputs[i].type);
+      if (inputs[i].rank > 0) {
+        input.shape.assign(inputs[i].shape, inputs[i].shape + inputs[i].rank);
+      }
+      input.data = inputs[i].data;
+      input.element_count = static_cast<size_t>(inputs[i].element_count);
+      native_inputs.push_back(std::move(input));
+    }
+    auto outputs = model_set->impl->Run(model_name, native_inputs);
+    auto *result = new SherpaOnnxFasterLivePortraitResultInternal;
+    result->storage.reserve(outputs.size());
+    result->names.reserve(outputs.size());
+    result->shapes.reserve(outputs.size());
+    result->data.reserve(outputs.size());
+    for (auto &output : outputs) {
+      result->names.push_back(std::move(output.name));
+      result->shapes.push_back(std::move(output.shape));
+      result->data.push_back(std::move(output.data));
+      SherpaOnnxFasterLivePortraitTensor tensor{};
+      tensor.name = result->names.back().c_str();
+      tensor.type = static_cast<int32_t>(output.type);
+      tensor.shape = result->shapes.back().data();
+      tensor.rank = static_cast<int32_t>(result->shapes.back().size());
+      tensor.data = result->data.back().data();
+      tensor.element_count = static_cast<int64_t>(
+          result->data.back().size() / FasterLivePortraitTensorTypeSize(output.type));
+      result->storage.push_back(tensor);
+    }
+    result->count = static_cast<int32_t>(result->storage.size());
+    result->tensors = result->storage.data();
+    return result;
+  } catch (const std::exception &e) {
+    SHERPA_ONNX_LOGE("FasterLivePortrait model run failed: %s", e.what());
+    return nullptr;
+  }
+}
+
+void SherpaOnnxDestroyFasterLivePortraitResult(
+    const SherpaOnnxFasterLivePortraitResult *result) {
+  delete static_cast<const SherpaOnnxFasterLivePortraitResultInternal *>(result);
+}
+
+int32_t SherpaOnnxFasterLivePortraitResultGetCount(
+    const SherpaOnnxFasterLivePortraitResult *result) {
+  return result ? result->count : 0;
+}
+
+const SherpaOnnxFasterLivePortraitTensor *
+SherpaOnnxFasterLivePortraitResultGetTensor(
+    const SherpaOnnxFasterLivePortraitResult *result, int32_t index) {
+  if (!result || index < 0 || index >= result->count) return nullptr;
+  return &result->tensors[index];
+}
 
 struct SherpaOnnxOfflineDiacritization {
   std::unique_ptr<sherpa_onnx::OfflineDiacritization> impl;

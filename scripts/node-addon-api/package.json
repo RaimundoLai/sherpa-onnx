@@ -11,6 +11,8 @@
     "install": "cmake-js compile --log-level verbose",
     "postinstall": "npm run typecheck",
     "test": "node --napi-modules ./test/test_binding.js",
+    "test:joyvasa": "node --napi-modules ./test/test_joyvasa.js",
+    "start:talking-video": "node ./web/server.js",
     "typecheck": "tsc"
   },
   "repository": {
@@ -59,6 +61,14 @@
   "license": "Apache-2.0",
   "gypfile": true,
   "name": "sherpa-onnx-node-addon-api",
+  "files": [
+    "CMakeLists.txt",
+    "README.md",
+    "build/Release/sherpa-onnx.node",
+    "lib",
+    "src",
+    "web"
+  ],
   "bugs": {
     "url": "https://github.com/k2-fsa/sherpa-onnx/issues"
   },

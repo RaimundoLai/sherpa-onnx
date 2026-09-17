@@ -106,6 +106,117 @@
  */
 
 /**
+ * Raw interleaved image input for face detection and recognition.
+ * @typedef {Object} FaceImage
+ * @property {Uint8Array|Buffer} data - Packed rows of pixel bytes.
+ * @property {number} width - Image width in pixels.
+ * @property {number} height - Image height in pixels.
+ * @property {number} channels - 3 or 4.
+ * @property {number} [stride] - Bytes per row; defaults to width*channels.
+ * @property {'rgb'|'bgr'|'rgba'|'bgra'|0|1|2|3} [format] - Pixel order.
+ */
+
+/**
+ * One ONNX face detection. Coordinates are in source-image pixels.
+ * @typedef {Object} FaceDetection
+ * @property {number} index - Index within the detection result.
+ * @property {number} score - Detection confidence.
+ * @property {number[]} bbox - [x1, y1, x2, y2].
+ * @property {number[]} landmarks - Five x/y landmark pairs.
+ */
+
+/**
+ * ONNX face detector configuration.
+ * @typedef {Object} FaceDetectorConfig
+ * @property {string} model - Path to MediaPipe face_detector.onnx. Legacy
+ *   SCRFD/RetinaFace models remain supported only for compatibility.
+ * @property {string} [landmarkModel] - Optional MediaPipe
+ *   face_landmark_detector.onnx used to refine five-point landmarks.
+ * @property {number} [numThreads]
+ * @property {boolean|number} [debug]
+ * @property {string} [provider] - cpu, cuda, coreml, and other available EPs.
+ * @property {number} [inputWidth=640]
+ * @property {number} [inputHeight=640]
+ * @property {number} [scoreThreshold=0.5]
+ * @property {number} [nmsThreshold=0.4]
+ * @property {number} [maxFaces=0] - 0 means no explicit limit.
+ */
+
+/** @typedef {FaceDetectorConfig} RetinaFaceConfig @deprecated */
+
+/**
+ * AuraFace ONNX recognizer configuration.
+ * @typedef {Object} AuraFaceConfig
+ * @property {string} model - Path to glintr100.onnx from AuraFace-v1.
+ * @property {number} [numThreads]
+ * @property {boolean|number} [debug]
+ * @property {string} [provider]
+ * @property {number} [inputWidth=112]
+ * @property {number} [inputHeight=112]
+ */
+
+/**
+ * Supported tensor element types for FasterLivePortrait ONNX graphs.
+ * @typedef {'float32'|'float16'|'int64'|'int32'|'uint8'|'bool'} OnnxTensorType
+ */
+
+/**
+ * Named tensor input. The data typed array must match type. Tensor dimensions
+ * are concrete positive integers; dynamic model dimensions are resolved from
+ * the supplied shape at run time.
+ * @typedef {Object} OnnxTensor
+ * @property {string} [name] - ONNX input name. Omit to use model input order.
+ * @property {OnnxTensorType} type
+ * @property {number[]} shape
+ * @property {Float32Array|Uint16Array|BigInt64Array|Int32Array|Uint8Array} data
+ */
+
+/**
+ * One output tensor returned by FasterLivePortrait.run().
+ * @typedef {Object} OnnxTensorOutput
+ * @property {string} name
+ * @property {OnnxTensorType} type
+ * @property {number[]} shape
+ * @property {Float32Array|Uint16Array|BigInt64Array|Int32Array|Uint8Array} data
+ */
+
+/**
+ * FasterLivePortrait ONNX model-set configuration.
+ *
+ * The object form is convenient for the official model names, for example
+ * `{appearanceFeatureExtractor: './appearance_feature_extractor.onnx'}`.
+ * An array of `{name, path}` entries is also accepted.
+ * @typedef {Object} FasterLivePortraitConfig
+ * @property {Object<string,string>|{name:string,path:string}[]} models
+ * @property {number} [numThreads=1]
+ * @property {string} [provider='cpu']
+ * @property {boolean} [debug=false]
+ */
+
+/**
+ * JoyVASA ONNX audio-to-motion configuration. `models` points to the exported
+ * audio encoder and motion denoiser, or `metadata` points to joyvasa.json.
+ * @typedef {Object} JoyVASAConfig
+ * @property {Object<string,string>} [models]
+ * @property {string|Object} [metadata]
+ * @property {string} [audioEncoderModel='audioEncoder']
+ * @property {string} [motionGeneratorModel='motionGenerator']
+ * @property {string} [provider='cpu']
+ * @property {number} [numThreads=1]
+ * @property {number} [fps=25]
+ * @property {number} [nMotions=100]
+ * @property {number} [nPrevMotions=10]
+ * @property {number} [motionFeatDim=76]
+ * @property {number} [featureDim=512]
+ * @property {number} [nDiffSteps=500]
+ * @property {number} [cfgScale=2.8]
+ * @property {boolean} [useIndicator]
+ * @property {Array|Float32Array} [startMotionFeat]
+ * @property {Array|Float32Array} [startAudioFeat]
+ * @property {Array|Float32Array} [nullAudioFeat]
+ */
+
+/**
  * A single audio event returned by AudioTagging.compute().
  * @typedef {Object} AudioEvent
  * @property {string} name - The event name.

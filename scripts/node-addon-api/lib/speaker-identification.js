@@ -54,6 +54,20 @@ class SpeakerEmbeddingExtractor {
     return addon.speakerEmbeddingExtractorComputeEmbedding(
         this.handle, stream.handle, enableExternalBuffer);
   }
+
+  /**
+   * Compute embedding asynchronously and return a Promise resolving to Float32Array
+   * @param {OnlineStream} stream
+   * @param {boolean} [enableExternalBuffer=true]
+   * @returns {Promise<Float32Array>}
+   */
+  async computeAsync(stream, enableExternalBuffer = true) {
+    if (addon.speakerEmbeddingExtractorComputeEmbeddingAsync) {
+      return await addon.speakerEmbeddingExtractorComputeEmbeddingAsync(
+          this.handle, stream.handle, enableExternalBuffer);
+    }
+    return this.compute(stream, enableExternalBuffer);
+  }
 }
 
 /**

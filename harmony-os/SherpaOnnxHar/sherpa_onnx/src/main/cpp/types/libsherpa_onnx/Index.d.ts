@@ -72,6 +72,7 @@ export const speakerEmbeddingExtractorDim: (handle: object) => number;
 export const speakerEmbeddingExtractorCreateStream: (handle: object) => object;
 export const speakerEmbeddingExtractorIsReady: (handle: object, stream: object) => boolean;
 export const speakerEmbeddingExtractorComputeEmbedding: (handle: object, stream: object, enableExternalBuffer: boolean) => Float32Array;
+export const speakerEmbeddingExtractorComputeEmbeddingAsync: (handle: object, stream: object, enableExternalBuffer?: boolean) => Promise<Float32Array>;
 export const createSpeakerEmbeddingManager: (dim: number) => object;
 export const speakerEmbeddingManagerAdd: (handle: object, speaker: {name: string, v: Float32Array}) => boolean;
 export const speakerEmbeddingManagerAddListFlattened: (handle: object, speaker: {name: string, vv: Float32Array, n: number}) => boolean;
