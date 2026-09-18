@@ -7,7 +7,71 @@ const path = require('path');
 const {spawnSync, spawn} = require('child_process');
 const {FasterLivePortrait} = require('./faster-live-portrait.js');
 const {JoyVASA} = require('./joyvasa.js');
-const {FaceDetector} = require('./face.js');
+const {FaceDetector, createFaceDetectorConfig} = require('./face.js');
+
+const TALKING_VIDEO_DEFAULTS = Object.freeze({
+  poseSmoothing: 0.12,
+  eyeSmoothing: 0.35,
+  mouthSmoothing: 0.50,
+  eyeOpeningScale: 0.45,
+  nativeFrameBatchSize: 4,
+  faceDetectorOptions: Object.freeze({
+    scoreThreshold: 0.5,
+    nmsThreshold: 0.4,
+    maxFaces: 1,
+  }),
+  joyvasaOptions: Object.freeze({}),
+});
+
+/**
+ * Normalize public talking-video options. Applications can keep this object
+ * in their own configuration and change rendering behavior without editing
+ * this module or the generated patch.
+ * @param {Object} overrides
+ * @returns {Object}
+ */
+function createTalkingVideoOptions(overrides = {}) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    throw new TypeError('Talking-video options must be an object');
+  }
+  return {
+    ...TALKING_VIDEO_DEFAULTS,
+    ...overrides,
+    faceDetectorOptions: {
+      ...TALKING_VIDEO_DEFAULTS.faceDetectorOptions,
+      ...(overrides.faceDetectorOptions || {}),
+    },
+    joyvasaOptions: {
+      ...TALKING_VIDEO_DEFAULTS.joyvasaOptions,
+      ...(overrides.joyvasaOptions || {}),
+    },
+  };
+}
+
+function resolveFaceDetectorOptions(options, model, landmarkModel) {
+  const overrides = options.faceDetectorOptions || {};
+  return createFaceDetectorConfig({
+    ...overrides,
+    model: overrides.model || model,
+    landmarkModel: overrides.landmarkModel || landmarkModel,
+    provider: overrides.provider || options.provider || 'cpu',
+    numThreads: overrides.numThreads || options.numThreads || 2,
+  });
+}
+
+function resolveJoyVasaOptions(options, metadata, provider, numThreads) {
+  const overrides = options.joyvasaOptions || {};
+  const config = {
+    ...overrides,
+    metadata,
+    provider: overrides.provider || provider,
+    numThreads: overrides.numThreads || numThreads,
+  };
+  if (options.nDiffSteps !== undefined && config.nDiffSteps === undefined) {
+    config.nDiffSteps = Number(options.nDiffSteps);
+  }
+  return config;
+}
 
 async function detectFacesAsync(detector, image) {
   if (typeof detector.detectAsync === 'function') {
@@ -99,6 +163,10 @@ const LIVEPORTRAIT_EYE_EXPRESSION_INDICES = [11, 13, 15, 16, 18];
 // and jaw/lip contour.  Smooth these independently so phoneme motion remains
 // responsive without the small frame-to-frame jumps from diffusion noise.
 const LIVEPORTRAIT_MOUTH_EXPRESSION_INDICES = [6, 12, 14, 17, 19, 20];
+// The remaining points describe cheeks, brows, and other non-lip facial
+// regions. They should follow the head-pose smoothing instead of inheriting
+// high-frequency diffusion noise.
+const LIVEPORTRAIT_STABLE_EXPRESSION_INDICES = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10];
 
 // JoyVASA's expression channels (especially jaw/lips) must remain responsive,
 // but the diffusion output can contain small high-frequency frame noise. Smooth
@@ -135,9 +203,15 @@ function smoothExpressionGroups(previous, current, alpha, indices) {
 
 function smoothMotion(previous, current, poseAlpha, eyeAlpha, mouthAlpha) {
   const pose = smoothRigidPose(previous, current, poseAlpha);
-  const eyes = smoothExpressionGroups(
+  const stable = smoothExpressionGroups(
     previous,
     pose,
+    poseAlpha,
+    LIVEPORTRAIT_STABLE_EXPRESSION_INDICES,
+  );
+  const eyes = smoothExpressionGroups(
+    previous,
+    stable,
     eyeAlpha,
     LIVEPORTRAIT_EYE_EXPRESSION_INDICES,
   );
@@ -147,6 +221,18 @@ function smoothMotion(previous, current, poseAlpha, eyeAlpha, mouthAlpha) {
     mouthAlpha,
     LIVEPORTRAIT_MOUTH_EXPRESSION_INDICES,
   );
+}
+
+// These are EMA alphas: lower values remove more frame-to-frame jitter at the
+// cost of a little more motion lag. Head pose is intentionally conservative
+// because pitch/yaw/roll noise is much more visible than lip noise.
+const DEFAULT_POSE_SMOOTHING = 0.12;
+
+function smoothingAlpha(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(1, parsed));
 }
 
 function buildExpressionDelta(sourceExp, firstExp, currentExp, eyeOpeningScale) {
@@ -546,15 +632,11 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
   if (!modelDir) throw new Error('modelDir is required for MLX MediaPipe detection');
   const detectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
-  const detector = new FaceDetector({
-    model: detectorModel,
+  const detector = new FaceDetector(resolveFaceDetectorOptions(
+    {...options, provider: options.detectorProvider || options.provider || 'cpu'},
+    detectorModel,
     landmarkModel,
-    provider: options.detectorProvider || options.provider || 'cpu',
-    numThreads: options.numThreads || 2,
-    scoreThreshold: 0.5,
-    nmsThreshold: 0.4,
-    maxFaces: 1,
-  });
+  ));
   const faces = await detectFacesAsync(detector, {
     data: source,
     width,
@@ -608,12 +690,12 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
   if (motionBackend === 'onnx') {
     const joyMetadata = options.joyvasaMetadata || process.env.SHERPA_ONNX_JOYVASA_METADATA;
     if (!joyMetadata) throw new Error('joyvasaMetadata is required for ONNX MLX motion');
-    const joy = new JoyVASA({
-      metadata: joyMetadata,
-      provider: options.motionProvider || options.provider || defaultProvider(),
-      numThreads: options.numThreads || 2,
-      nDiffSteps: options.nDiffSteps === undefined ? undefined : Number(options.nDiffSteps),
-    });
+    const joy = new JoyVASA(resolveJoyVasaOptions(
+      {...options, provider: options.motionProvider || options.provider || defaultProvider()},
+      joyMetadata,
+      options.motionProvider || options.provider || defaultProvider(),
+      options.numThreads || 2,
+    ));
     const sampleRate = options.audioSampleRate || 16000;
     const maxSamples = maxSeconds === 0
       ? options.audioSamples.length
@@ -742,15 +824,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
     numThreads: options.numThreads || 2,
     models: {motion: motionPath, stitching: stitchingPath},
   });
-  const detector = new FaceDetector({
-    model: detectorModel,
-    landmarkModel,
-    provider,
-    numThreads: options.numThreads || 2,
-    scoreThreshold: 0.5,
-    nmsThreshold: 0.4,
-    maxFaces: 1,
-  });
+  const detector = new FaceDetector(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
   const faces = await detectFacesAsync(detector, {data: source, width, height, channels: 3, format: 'rgb'});
   if (!faces.length) throw new Error('No face found in source image');
   const face = faces[0];
@@ -815,12 +889,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
     motionFrameCount = Math.floor(motion.length / motionDim);
     motionBackend = 'mlx';
   } else {
-    const joy = new JoyVASA({
-      metadata: joyMetadata,
-      provider,
-      numThreads: options.numThreads || 2,
-      nDiffSteps: options.nDiffSteps === undefined ? undefined : Number(options.nDiffSteps),
-    });
+    const joy = new JoyVASA(resolveJoyVasaOptions(options, joyMetadata, provider, options.numThreads || 2));
     const joyResult = typeof joy.generateMotionSequenceAsync === 'function'
       ? await joy.generateMotionSequenceAsync(audioSamples, {sampleRate, cfg: options.cfg === true})
       : joy.generateMotionSequence(audioSamples, {sampleRate, cfg: options.cfg === true});
@@ -870,18 +939,10 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const nativeBatchSize = nativeBatchRender
     ? Math.max(1, Math.min(4, Number(options.nativeFrameBatchSize || 4)))
     : 1;
-  const poseAlpha = options.poseSmoothing === undefined
-    ? 0.45
-    : Math.max(0, Math.min(1, Number(options.poseSmoothing)));
-  const eyeAlpha = options.eyeSmoothing === undefined
-    ? 0.35
-    : Math.max(0, Math.min(1, Number(options.eyeSmoothing)));
-  const mouthAlpha = options.mouthSmoothing === undefined
-    ? 0.50
-    : Math.max(0, Math.min(1, Number(options.mouthSmoothing)));
-  const eyeOpeningScale = options.eyeOpeningScale === undefined
-    ? 0.45
-    : Math.max(0, Math.min(1, Number(options.eyeOpeningScale)));
+  const poseAlpha = smoothingAlpha(options.poseSmoothing, DEFAULT_POSE_SMOOTHING);
+  const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
+  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
+  const eyeOpeningScale = smoothingAlpha(options.eyeOpeningScale, 0.45);
   let previousRigidPose;
   let pasteMap;
   try {
@@ -1028,8 +1089,7 @@ function createTalkingVideoPipeline(options = {}) {
   }
   const faceDetectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
   const faceLandmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
-  const joyConfig = {metadata: joyMetadata, provider, numThreads};
-  if (options.nDiffSteps !== undefined) joyConfig.nDiffSteps = Number(options.nDiffSteps);
+  const joyConfig = resolveJoyVasaOptions(options, joyMetadata, provider, numThreads);
   return {
     modelDir,
     profile: warping.profile,
@@ -1039,8 +1099,7 @@ function createTalkingVideoPipeline(options = {}) {
       numThreads,
       models: getFlpModels(modelDir, warpingModelPath),
     }),
-    detector: new FaceDetector({model: faceDetectorModel, landmarkModel: faceLandmarkModel,
-      provider, scoreThreshold: 0.5, nmsThreshold: 0.4, maxFaces: 1}),
+    detector: new FaceDetector(resolveFaceDetectorOptions(options, faceDetectorModel, faceLandmarkModel)),
     joy: new JoyVASA(joyConfig),
     sourceCache: new Map(),
   };
@@ -1057,6 +1116,7 @@ async function renderTalkingVideo(options) {
       !Number.isInteger(options.height) || !options.audioSamples) {
     throw new TypeError('renderTalkingVideo requires sourceRgb, width, height and audioSamples');
   }
+  options = createTalkingVideoOptions(options);
   const inputSource = new Uint8Array(options.sourceRgb);
   const inputWidth = options.width;
   const inputHeight = options.height;
@@ -1174,6 +1234,10 @@ async function renderTalkingVideo(options) {
   const frameCount = Math.max(1, Math.ceil(motionFrameCount / joy.fps * fps));
   const firstMotion = decodeMotion(motion.slice(0, joy.motionFeatDim));
   const firstR = rotationMatrix(firstMotion.pitch, firstMotion.yaw, firstMotion.roll);
+  const poseAlpha = smoothingAlpha(options.poseSmoothing, DEFAULT_POSE_SMOOTHING);
+  const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
+  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
+  let previousRigidPose;
   const outputRaw = options.outputRaw;
   if (!outputRaw) throw new TypeError('outputRaw is required');
   const outputFd = fs.openSync(outputRaw, 'w');
@@ -1189,7 +1253,18 @@ async function renderTalkingVideo(options) {
   try {
     for (let frame = 0; frame < frameCount; ++frame) {
       const motionFrame = Math.min(motionFrameCount - 1, Math.floor(frame * joy.fps / fps));
-      const current = decodeMotion(motion.slice(motionFrame * joy.motionFeatDim, (motionFrame + 1) * joy.motionFeatDim));
+      const rawCurrent = decodeMotion(motion.slice(
+        motionFrame * joy.motionFeatDim,
+        (motionFrame + 1) * joy.motionFeatDim,
+      ));
+      const current = smoothMotion(
+        previousRigidPose,
+        rawCurrent,
+        poseAlpha,
+        eyeAlpha,
+        mouthAlpha,
+      );
+      previousRigidPose = current;
       const currentR = rotationMatrix(current.pitch, current.yaw, current.roll);
       const relativeR = matMul(matMul(currentR, transpose3(firstR), 3, 3, 3), sourceR, 3, 3, 3);
       const deltaExp = new Float32Array(63);
@@ -1236,4 +1311,9 @@ async function renderTalkingVideo(options) {
   };
 }
 
-module.exports = {createTalkingVideoPipeline, renderTalkingVideo};
+module.exports = {
+  TALKING_VIDEO_DEFAULTS,
+  createTalkingVideoOptions,
+  createTalkingVideoPipeline,
+  renderTalkingVideo,
+};

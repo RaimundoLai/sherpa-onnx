@@ -5,6 +5,30 @@
 
 const addon = require('./addon.js');
 
+const FACE_DETECTOR_DEFAULTS = Object.freeze({
+  numThreads: 2,
+  debug: false,
+  provider: 'cpu',
+  inputWidth: 640,
+  inputHeight: 640,
+  scoreThreshold: 0.5,
+  nmsThreshold: 0.4,
+  maxFaces: 0,
+});
+
+/**
+ * Create a face detector configuration without coupling callers to the
+ * native addon defaults. The model path remains application-specific.
+ * @param {Partial<FaceDetectorConfig>|Object} overrides
+ * @returns {FaceDetectorConfig|Object}
+ */
+function createFaceDetectorConfig(overrides = {}) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    throw new TypeError('Face detector options must be an object');
+  }
+  return {...FACE_DETECTOR_DEFAULTS, ...overrides};
+}
+
 /**
  * Generic ONNX face detector.
  *
@@ -219,4 +243,6 @@ module.exports = {
   FaceIdentityTracker,
   faceCosineSimilarity,
   faceSamePerson,
+  FACE_DETECTOR_DEFAULTS,
+  createFaceDetectorConfig,
 };
