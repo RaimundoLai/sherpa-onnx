@@ -1090,15 +1090,29 @@ function createTalkingVideoPipeline(options = {}) {
   const faceDetectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
   const faceLandmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
   const joyConfig = resolveJoyVasaOptions(options, joyMetadata, provider, numThreads);
+  const warpingProvider = options.warpingProvider ||
+    process.env.SHERPA_ONNX_FLP_WARPING_PROVIDER || 'cpu';
+  const portraitModels = getFlpModels(modelDir, warpingModelPath);
+  if (provider !== warpingProvider) delete portraitModels.warpingSpade;
+  const portrait = new FasterLivePortrait({
+    provider,
+    numThreads,
+    models: portraitModels,
+  });
+  // ORT 1.28.2 CUDA supports the 5-D GridSample used by the converted
+  // opset-20 warping model; callers may still select CPU for compatibility.
+  const warpingPortrait = provider === warpingProvider ? portrait :
+    new FasterLivePortrait({
+      provider: warpingProvider,
+      numThreads,
+      models: {warpingSpade: warpingModelPath},
+    });
   return {
     modelDir,
     profile: warping.profile,
     provider,
-    portrait: new FasterLivePortrait({
-      provider,
-      numThreads,
-      models: getFlpModels(modelDir, warpingModelPath),
-    }),
+    portrait,
+    warpingPortrait,
     detector: new FaceDetector(resolveFaceDetectorOptions(options, faceDetectorModel, faceLandmarkModel)),
     joy: new JoyVASA(joyConfig),
     sourceCache: new Map(),
@@ -1153,10 +1167,11 @@ async function renderTalkingVideo(options) {
     originalWarpingSpadeModel: options.originalWarpingSpadeModel,
     metalWarpingSpadeModel: options.metalWarpingSpadeModel,
     warpingSpadeModel: options.warpingSpadeModel,
+    warpingProvider: options.warpingProvider,
     faceDetectorModel: options.faceDetectorModel,
     faceLandmarkModel: options.faceLandmarkModel,
   });
-  const {provider, portrait, detector, joy} = pipeline;
+  const {provider, portrait, warpingPortrait = portrait, detector, joy} = pipeline;
   const sourceImage = {data: source, width, height, channels: 3, format: 'rgb'};
   const sourceKey = `${width}x${height}:${crypto.createHash('sha1').update(source).digest('hex')}`;
   let sourceState = pipeline.sourceCache.get(sourceKey);
@@ -1242,7 +1257,7 @@ async function renderTalkingVideo(options) {
   if (!outputRaw) throw new TypeError('outputRaw is required');
   const outputFd = fs.openSync(outputRaw, 'w');
   const sourceFeature = modelOutput(appearance, 'output');
-  const warpingModel = portrait.getModelInfo().models.find(
+  const warpingModel = warpingPortrait.getModelInfo().models.find(
       (model) => model.name === 'warpingSpade');
   if (!warpingModel) throw new Error("Missing 'warpingSpade' model metadata");
   const warpingFeatureInput = warpingModel.inputs.find(
@@ -1284,7 +1299,7 @@ async function renderTalkingVideo(options) {
         drivingKp[point * 3 + 1] += t[1];
       }
       const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
-      const warped = finiteOutputs(await portraitRun(portrait, 'warpingSpade', [
+      const warped = finiteOutputs(await portraitRun(warpingPortrait, 'warpingSpade', [
         {name: 'feature_3d', type: 'float32', shape: warpingFeature.shape, data: warpingFeature.data},
         {name: 'kp_driving', type: 'float32', shape: [1, 21, 3], data: stitchedKp},
         {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
