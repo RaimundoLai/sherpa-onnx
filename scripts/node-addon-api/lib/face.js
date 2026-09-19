@@ -5,6 +5,30 @@
 
 const addon = require('./addon.js');
 
+const FACE_DETECTOR_DEFAULTS = Object.freeze({
+  numThreads: 2,
+  debug: false,
+  provider: 'cpu',
+  inputWidth: 640,
+  inputHeight: 640,
+  scoreThreshold: 0.5,
+  nmsThreshold: 0.4,
+  maxFaces: 0,
+});
+
+/**
+ * Create a face detector configuration without coupling callers to the
+ * native addon defaults. The model path remains application-specific.
+ * @param {Partial<FaceDetectorConfig>|Object} overrides
+ * @returns {FaceDetectorConfig|Object}
+ */
+function createFaceDetectorConfig(overrides = {}) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    throw new TypeError('Face detector options must be an object');
+  }
+  return {...FACE_DETECTOR_DEFAULTS, ...overrides};
+}
+
 /**
  * Generic ONNX face detector.
  *
@@ -16,6 +40,22 @@ class FaceDetector {
   /**
    * @param {FaceDetectorConfig|Object} configOrHandle
    */
+  /**
+   * Asynchronously create a face detector on an N-API worker thread.
+   * @param {FaceDetectorConfig|Object} config
+   * @returns {Promise<FaceDetector>}
+   */
+  static async create(config) {
+    const createAsync = addon.createFaceDetectorAsync || addon.createRetinaFaceDetectorAsync;
+    if (typeof createAsync === 'function') {
+      const handle = await createAsync(config);
+      const instance = new FaceDetector(handle);
+      instance.config = config;
+      return instance;
+    }
+    return new FaceDetector(config);
+  }
+
   constructor(configOrHandle) {
     if (configOrHandle && typeof configOrHandle === 'object' &&
         configOrHandle.model !== undefined) {
@@ -219,4 +259,6 @@ module.exports = {
   FaceIdentityTracker,
   faceCosineSimilarity,
   faceSamePerson,
+  FACE_DETECTOR_DEFAULTS,
+  createFaceDetectorConfig,
 };

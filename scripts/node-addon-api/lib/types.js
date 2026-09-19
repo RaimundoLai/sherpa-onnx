@@ -156,6 +156,21 @@
  */
 
 /**
+ * Public talking-video rendering options. Model paths and media buffers are
+ * still supplied by the host application; the nested detector and JoyVASA
+ * options are forwarded to their respective public APIs.
+ * @typedef {Object} TalkingVideoOptions
+ * @property {number} [poseSmoothing=0.12] EMA alpha for pitch/yaw/roll and
+ *   non-mouth facial motion. Lower values are smoother but add lag.
+ * @property {number} [eyeSmoothing=0.35]
+ * @property {number} [mouthSmoothing=0.50]
+ * @property {number} [eyeOpeningScale=0.45]
+ * @property {number} [nativeFrameBatchSize=4]
+ * @property {FaceDetectorConfig} [faceDetectorOptions]
+ * @property {JoyVASAConfig} [joyvasaOptions]
+ */
+
+/**
  * Supported tensor element types for FasterLivePortrait ONNX graphs.
  * @typedef {'float32'|'float16'|'int64'|'int32'|'uint8'|'bool'} OnnxTensorType
  */

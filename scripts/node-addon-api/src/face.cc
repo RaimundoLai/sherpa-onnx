@@ -248,6 +248,136 @@ CreateFaceDetectorWrapper(const Napi::CallbackInfo &info) {
       });
 }
 
+class CreateFaceDetectorWorker : public Napi::AsyncWorker {
+ public:
+  CreateFaceDetectorWorker(
+      Napi::Env env,
+      std::string model,
+      std::string landmark_model,
+      std::string provider,
+      int32_t num_threads,
+      int32_t input_width,
+      int32_t input_height,
+      int32_t max_faces,
+      float score_threshold,
+      float nms_threshold,
+      int32_t debug,
+      Napi::Promise::Deferred deferred)
+      : Napi::AsyncWorker(env),
+        model_(std::move(model)),
+        landmark_model_(std::move(landmark_model)),
+        provider_(std::move(provider)),
+        num_threads_(num_threads),
+        input_width_(input_width),
+        input_height_(input_height),
+        max_faces_(max_faces),
+        score_threshold_(score_threshold),
+        nms_threshold_(nms_threshold),
+        debug_(debug),
+        deferred_(deferred) {}
+
+  void Execute() override {
+    try {
+      SherpaOnnxRetinaFaceConfig config{};
+      config.model = model_.c_str();
+      config.landmark_model = landmark_model_.c_str();
+      config.provider = provider_.c_str();
+      config.num_threads = num_threads_;
+      config.input_width = input_width_;
+      config.input_height = input_height_;
+      config.max_faces = max_faces_;
+      config.score_threshold = score_threshold_;
+      config.nms_threshold = nms_threshold_;
+      config.debug = debug_;
+
+      detector_ = SherpaOnnxCreateRetinaFaceDetector(&config);
+      if (!detector_) {
+        SetError("Failed to create ONNX face detector; check config and model");
+      }
+    } catch (const std::exception &e) {
+      SetError(e.what());
+    } catch (...) {
+      SetError("Failed to create ONNX face detector");
+    }
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    auto external = Napi::External<SherpaOnnxRetinaFaceDetector>::New(
+        env, const_cast<SherpaOnnxRetinaFaceDetector *>(detector_),
+        [](Napi::Env /*env*/, SherpaOnnxRetinaFaceDetector *value) {
+          SherpaOnnxDestroyRetinaFaceDetector(value);
+        });
+    deferred_.Resolve(external);
+  }
+
+  void OnError(const Napi::Error &error) override {
+    deferred_.Reject(error.Value());
+  }
+
+ private:
+  std::string model_;
+  std::string landmark_model_;
+  std::string provider_;
+  int32_t num_threads_ = 0;
+  int32_t input_width_ = 0;
+  int32_t input_height_ = 0;
+  int32_t max_faces_ = 0;
+  float score_threshold_ = 0.0f;
+  float nms_threshold_ = 0.0f;
+  int32_t debug_ = 0;
+  Napi::Promise::Deferred deferred_;
+  const SherpaOnnxRetinaFaceDetector *detector_ = nullptr;
+};
+
+Napi::Value CreateFaceDetectorAsyncWrapper(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    ThrowTypeError(env, "createFaceDetectorAsync expects a config object");
+    return env.Null();
+  }
+  Napi::Object object = info[0].As<Napi::Object>();
+  std::string model = object.Has("model") && object.Get("model").IsString()
+                          ? object.Get("model").As<Napi::String>().Utf8Value()
+                          : "";
+  std::string landmark_model =
+      object.Has("landmarkModel") && object.Get("landmarkModel").IsString()
+          ? object.Get("landmarkModel").As<Napi::String>().Utf8Value()
+          : "";
+  std::string provider =
+      object.Has("provider") && object.Get("provider").IsString()
+          ? object.Get("provider").As<Napi::String>().Utf8Value()
+          : "cpu";
+  int32_t num_threads = 0;
+  int32_t input_width = 0;
+  int32_t input_height = 0;
+  int32_t max_faces = 0;
+  float score_threshold = 0.0f;
+  float nms_threshold = 0.0f;
+  ReadInt(object, "numThreads", &num_threads);
+  ReadInt(object, "inputWidth", &input_width);
+  ReadInt(object, "inputHeight", &input_height);
+  ReadInt(object, "maxFaces", &max_faces);
+  ReadFloat(object, "scoreThreshold", &score_threshold);
+  ReadFloat(object, "nmsThreshold", &nms_threshold);
+  int32_t debug = 0;
+  if (object.Has("debug")) {
+    if (object.Get("debug").IsBoolean()) {
+      debug = object.Get("debug").As<Napi::Boolean>().Value() ? 1 : 0;
+    } else {
+      ReadInt(object, "debug", &debug);
+    }
+  }
+
+  auto deferred = Napi::Promise::Deferred::New(env);
+  auto *worker = new CreateFaceDetectorWorker(
+      env, std::move(model), std::move(landmark_model), std::move(provider),
+      num_threads, input_width, input_height, max_faces, score_threshold,
+      nms_threshold, debug, deferred);
+  worker->Queue();
+  return deferred.Promise();
+}
+
 Napi::Array FaceDetectorDetectWrapper(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
   if (info.Length() != 2 || !info[0].IsExternal()) {
@@ -574,7 +704,11 @@ void InitFace(Napi::Env env, Napi::Object exports) {
       Napi::Function::New(env, FaceDetectorDetectWrapper);
   auto face_detector_detect_async =
       Napi::Function::New(env, FaceDetectorDetectAsyncWrapper);
+  auto create_face_detector_async =
+      Napi::Function::New(env, CreateFaceDetectorAsyncWrapper);
   exports.Set("createFaceDetector", create_face_detector);
+  exports.Set("createFaceDetectorAsync", create_face_detector_async);
+  exports.Set("createRetinaFaceDetectorAsync", create_face_detector_async);
   exports.Set("faceDetectorDetect", face_detector_detect);
   exports.Set("faceDetectorDetectAsync", face_detector_detect_async);
   // Keep the original native names for already-published JavaScript clients.
