@@ -139,6 +139,25 @@ function tail(data, count, width) {
  */
 class JoyVASA {
   /** @param {JoyVASAConfig|Object} config */
+  /**
+   * Asynchronously initialize JoyVASA by loading models on worker threads.
+   * @param {JoyVASAConfig|Object} config
+   * @returns {Promise<JoyVASA>}
+   */
+  static async create(config) {
+    if (!config || typeof config !== 'object') throw new TypeError('JoyVASA requires a config object');
+    const metadataPath = typeof config.metadata === 'string' ? config.metadata : undefined;
+    const metadata = readJson(config.metadata);
+    const models = config.runtime ? undefined : resolveModels(config, metadata, metadataPath);
+    const runtime = config.runtime || await FasterLivePortrait.create({
+      models,
+      provider: config.provider || 'cpu',
+      numThreads: config.numThreads || 1,
+      debug: config.debug === true,
+    });
+    return new JoyVASA({...config, runtime});
+  }
+
   constructor(config) {
     if (!config || typeof config !== 'object') throw new TypeError('JoyVASA requires a config object');
     const metadataPath = typeof config.metadata === 'string' ? config.metadata : undefined;

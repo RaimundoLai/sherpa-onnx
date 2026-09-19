@@ -250,6 +250,21 @@ function mediaPipeLandmarksToTensor(landmarks, options) {
  */
 class FasterLivePortrait {
   /** @param {FasterLivePortraitConfig|Object} configOrHandle */
+  /**
+   * Asynchronously create a model set on an N-API worker thread.
+   * @param {FasterLivePortraitConfig|Object} config
+   * @returns {Promise<FasterLivePortrait>}
+   */
+  static async create(config) {
+    if (typeof addon.createFasterLivePortraitModelSetAsync === 'function') {
+      const handle = await addon.createFasterLivePortraitModelSetAsync(config);
+      const instance = new FasterLivePortrait(handle);
+      instance.config = config;
+      return instance;
+    }
+    return new FasterLivePortrait(config);
+  }
+
   constructor(configOrHandle) {
     if (configOrHandle && typeof configOrHandle === 'object' &&
         configOrHandle.models !== undefined) {

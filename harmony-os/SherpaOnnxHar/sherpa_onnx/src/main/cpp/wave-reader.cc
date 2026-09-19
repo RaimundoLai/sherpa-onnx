@@ -164,9 +164,120 @@ static Napi::Object ReadWaveFromBinaryWrapper(const Napi::CallbackInfo &info) {
   }
 }
 
+class ReadWaveAsyncWorker : public Napi::AsyncWorker {
+ public:
+  ReadWaveAsyncWorker(Napi::Env env, std::string filename,
+                      bool enable_external_buffer,
+                      Napi::Promise::Deferred deferred)
+      : Napi::AsyncWorker(env),
+        filename_(std::move(filename)),
+        enable_external_buffer_(enable_external_buffer),
+        deferred_(deferred) {}
+
+  ~ReadWaveAsyncWorker() override {
+    if (wave_) {
+      SherpaOnnxFreeWave(wave_);
+      wave_ = nullptr;
+    }
+  }
+
+  void Execute() override {
+    wave_ = SherpaOnnxReadWave(filename_.c_str());
+    if (!wave_) {
+      SetError("Failed to read '" + filename_ + "'");
+    }
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    if (enable_external_buffer_) {
+      const SherpaOnnxWave *hint = wave_;
+      wave_ = nullptr;
+      Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(
+          env, const_cast<float *>(hint->samples),
+          sizeof(float) * hint->num_samples,
+          [](Napi::Env /*env*/, void * /*data*/, const SherpaOnnxWave *hint_val) {
+            SherpaOnnxFreeWave(hint_val);
+          },
+          hint);
+      Napi::Float32Array float32Array =
+          Napi::Float32Array::New(env, hint->num_samples, arrayBuffer, 0);
+
+      Napi::Object obj = Napi::Object::New(env);
+      obj.Set(Napi::String::New(env, "samples"), float32Array);
+      obj.Set(Napi::String::New(env, "sampleRate"), hint->sample_rate);
+      deferred_.Resolve(obj);
+    } else {
+      Napi::ArrayBuffer arrayBuffer =
+          Napi::ArrayBuffer::New(env, sizeof(float) * wave_->num_samples);
+      Napi::Float32Array float32Array =
+          Napi::Float32Array::New(env, wave_->num_samples, arrayBuffer, 0);
+      std::copy(wave_->samples, wave_->samples + wave_->num_samples,
+                float32Array.Data());
+
+      Napi::Object obj = Napi::Object::New(env);
+      obj.Set(Napi::String::New(env, "samples"), float32Array);
+      obj.Set(Napi::String::New(env, "sampleRate"), wave_->sample_rate);
+
+      SherpaOnnxFreeWave(wave_);
+      wave_ = nullptr;
+
+      deferred_.Resolve(obj);
+    }
+  }
+
+  void OnError(const Napi::Error &error) override {
+    deferred_.Reject(error.Value());
+  }
+
+ private:
+  std::string filename_;
+  bool enable_external_buffer_ = true;
+  Napi::Promise::Deferred deferred_;
+  const SherpaOnnxWave *wave_ = nullptr;
+};
+
+static Napi::Value ReadWaveAsyncWrapper(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() > 2) {
+    std::ostringstream os;
+    os << "Expect only 2 arguments. Given: " << info.Length();
+    Napi::TypeError::New(env, os.str()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsString()) {
+    Napi::TypeError::New(env, "Argument 0 should be a string")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string filename = info[0].As<Napi::String>().Utf8Value();
+
+  bool enable_external_buffer = true;
+  if (info.Length() == 2) {
+    if (info[1].IsBoolean()) {
+      enable_external_buffer = info[1].As<Napi::Boolean>().Value();
+    } else {
+      Napi::TypeError::New(env, "Argument 1 should be a boolean")
+          .ThrowAsJavaScriptException();
+      return env.Null();
+    }
+  }
+
+  auto deferred = Napi::Promise::Deferred::New(env);
+  auto *worker = new ReadWaveAsyncWorker(env, std::move(filename),
+                                         enable_external_buffer, deferred);
+  worker->Queue();
+  return deferred.Promise();
+}
+
 void InitWaveReader(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "readWave"),
               Napi::Function::New(env, ReadWaveWrapper));
+
+  exports.Set(Napi::String::New(env, "readWaveAsync"),
+              Napi::Function::New(env, ReadWaveAsyncWrapper));
 
   exports.Set(Napi::String::New(env, "readWaveFromBinary"),
               Napi::Function::New(env, ReadWaveFromBinaryWrapper));

@@ -8,12 +8,14 @@ const {spawnSync, spawn} = require('child_process');
 const {FasterLivePortrait} = require('./faster-live-portrait.js');
 const {JoyVASA} = require('./joyvasa.js');
 const {FaceDetector, createFaceDetectorConfig} = require('./face.js');
+const {MotionController, AudioEnergyDetector} = require('./motion-controller.js');
 
 const TALKING_VIDEO_DEFAULTS = Object.freeze({
   poseSmoothing: 0.12,
   eyeSmoothing: 0.35,
   mouthSmoothing: 0.50,
   eyeOpeningScale: 0.45,
+  gestureScale: 1.0,
   nativeFrameBatchSize: 4,
   faceDetectorOptions: Object.freeze({
     scoreThreshold: 0.5,
@@ -898,7 +900,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
     motionDiffusionSteps = joy.nDiffSteps;
     motionBackend = 'onnx';
   }
-  const template = JSON.parse(fs.readFileSync(joyTemplate, 'utf8'));
+  const template = JSON.parse(await fs.promises.readFile(joyTemplate, 'utf8'));
   const values = (name) => flatten(template[name]);
   const meanExp = values('mean_exp');
   const stdExp = values('std_exp');
@@ -943,6 +945,8 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
   const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
   const eyeOpeningScale = smoothingAlpha(options.eyeOpeningScale, 0.45);
+  const gestureScale = options.gestureScale !== undefined ? Number(options.gestureScale) : 1.0;
+  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, outputFps);
   let previousRigidPose;
   let pasteMap;
   try {
@@ -958,6 +962,16 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
         );
         const rawCurrent = decodeMotion(motion.slice(selectedMotionFrame * motionDim,
           (selectedMotionFrame + 1) * motionDim));
+        const gestureDeltas = MotionController.evaluateGestures(
+          outputFrame,
+          speechAnalysis.events,
+          outputFps,
+          gestureScale
+        );
+        rawCurrent.pitch += gestureDeltas.deltaPitch;
+        rawCurrent.yaw += gestureDeltas.deltaYaw;
+        rawCurrent.roll += gestureDeltas.deltaRoll;
+        rawCurrent.t[1] += gestureDeltas.deltaTy;
         const current = smoothMotion(
           previousRigidPose,
           rawCurrent,
@@ -1071,6 +1085,59 @@ function defaultProvider() {
   return process.platform === 'darwin' ? 'coreml' : 'cpu';
 }
 
+async function createTalkingVideoPipelineAsync(options = {}) {
+  const modelDir = options.modelDir || process.env.SHERPA_ONNX_FLP_MODEL_DIR;
+  const joyMetadata = options.joyvasaMetadata || process.env.SHERPA_ONNX_JOYVASA_METADATA;
+  if (!modelDir || !joyMetadata) {
+    throw new Error('modelDir and joyvasaMetadata are required');
+  }
+  const provider = options.provider || defaultProvider();
+  const numThreads = options.numThreads || 2;
+  const warping = resolveWarpingModel(options);
+  const warpingModelPath = path.isAbsolute(warping.model) ? warping.model :
+    path.join(modelDir, warping.model);
+  if (!fs.existsSync(warpingModelPath)) {
+    throw new Error(
+      `Warping model for profile '${warping.profile}' was not found: ${warpingModelPath}. ` +
+      `Set the profile-specific model path or unset SHERPA_ONNX_FLP_WARPING_MODEL.`);
+  }
+  const faceDetectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
+  const faceLandmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
+  const joyConfig = resolveJoyVasaOptions(options, joyMetadata, provider, numThreads);
+  const warpingProvider = options.warpingProvider ||
+    process.env.SHERPA_ONNX_FLP_WARPING_PROVIDER || 'cpu';
+  const portraitModels = getFlpModels(modelDir, warpingModelPath);
+  if (provider !== warpingProvider) delete portraitModels.warpingSpade;
+
+  const [portrait, warpingPortrait, detector, joy] = await Promise.all([
+    FasterLivePortrait.create({
+      provider,
+      numThreads,
+      models: portraitModels,
+    }),
+    provider === warpingProvider
+      ? Promise.resolve(null)
+      : FasterLivePortrait.create({
+          provider: warpingProvider,
+          numThreads,
+          models: {warpingSpade: warpingModelPath},
+        }),
+    FaceDetector.create(resolveFaceDetectorOptions(options, faceDetectorModel, faceLandmarkModel)),
+    JoyVASA.create(joyConfig),
+  ]);
+
+  return {
+    modelDir,
+    profile: warping.profile,
+    provider,
+    portrait,
+    warpingPortrait: warpingPortrait || portrait,
+    detector,
+    joy,
+    sourceCache: new Map(),
+  };
+}
+
 function createTalkingVideoPipeline(options = {}) {
   const modelDir = options.modelDir || process.env.SHERPA_ONNX_FLP_MODEL_DIR;
   const joyMetadata = options.joyvasaMetadata || process.env.SHERPA_ONNX_JOYVASA_METADATA;
@@ -1157,7 +1224,7 @@ async function renderTalkingVideo(options) {
     throw new Error('modelDir, joyvasaMetadata and joyvasaTemplate are required');
   }
 
-  const pipeline = options.pipeline || createTalkingVideoPipeline({
+  const pipeline = options.pipeline || await createTalkingVideoPipelineAsync({
     modelDir,
     joyvasaMetadata: joyMetadata,
     provider: options.provider,
@@ -1252,6 +1319,8 @@ async function renderTalkingVideo(options) {
   const poseAlpha = smoothingAlpha(options.poseSmoothing, DEFAULT_POSE_SMOOTHING);
   const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
   const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
+  const gestureScale = options.gestureScale !== undefined ? Number(options.gestureScale) : 1.0;
+  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, fps);
   let previousRigidPose;
   const outputRaw = options.outputRaw;
   if (!outputRaw) throw new TypeError('outputRaw is required');
@@ -1272,6 +1341,16 @@ async function renderTalkingVideo(options) {
         motionFrame * joy.motionFeatDim,
         (motionFrame + 1) * joy.motionFeatDim,
       ));
+      const gestureDeltas = MotionController.evaluateGestures(
+        frame,
+        speechAnalysis.events,
+        fps,
+        gestureScale
+      );
+      rawCurrent.pitch += gestureDeltas.deltaPitch;
+      rawCurrent.yaw += gestureDeltas.deltaYaw;
+      rawCurrent.roll += gestureDeltas.deltaRoll;
+      rawCurrent.t[1] += gestureDeltas.deltaTy;
       const current = smoothMotion(
         previousRigidPose,
         rawCurrent,
@@ -1326,9 +1405,326 @@ async function renderTalkingVideo(options) {
   };
 }
 
+
+/**
+ * Render a seamless idle loop clip (default 3.0s, 75 frames at 25 fps) with
+ * micro head motion (pitch/yaw/roll/sway) and natural eye blinking,
+ * using FasterLivePortrait warping without audio.
+ */
+
+async function renderIdleLoopMlx(options, source, width, height, duration, outputFps) {
+  const frameCount = Math.max(1, Math.round(duration * outputFps));
+  const nativeRoot = options.mlxWeightsDir || options.modelDir;
+  if (!nativeRoot) throw new Error('Native MLX weights directory is required');
+  const motionDir = options.motionModelDir || options.modelDir;
+  const motionPath = options.motionModelPath || path.join(motionDir, 'motion_extractor.onnx');
+  const stitchingPath = options.stitchingModelPath || path.join(motionDir, 'stitching.onnx');
+  if (!fs.existsSync(motionPath) || !fs.existsSync(stitchingPath)) {
+    throw new Error(`Native MLX motion baseline requires motion_extractor.onnx and stitching.onnx under ${motionDir}`);
+  }
+  const detectorModel = resolveFaceDetectorModel(options.modelDir || nativeRoot, options.faceDetectorModel);
+  const landmarkModel = resolveFaceLandmarkModel(options.modelDir || nativeRoot, options.faceLandmarkModel);
+  const provider = options.provider || defaultProvider();
+  const portrait = await FasterLivePortrait.create({
+    provider,
+    numThreads: options.numThreads || 2,
+    models: {motion: motionPath, stitching: stitchingPath},
+  });
+  const detector = await FaceDetector.create(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
+
+  const faces = await detectFacesAsync(detector, {data: source, width, height, channels: 3, format: 'rgb'});
+  if (!faces.length) throw new Error('No face found in source image');
+  const face = faces[0];
+  const faceWidth = face.bbox[2] - face.bbox[0];
+  const faceHeight = face.bbox[3] - face.bbox[1];
+  const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
+  const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
+  const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
+  const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
+  const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
+  const sourceCropBuffer = Buffer.from(sourceCrop256.buffer, sourceCrop256.byteOffset, sourceCrop256.byteLength);
+
+  const sourceMotion = finiteOutputs(await portraitRunImage(portrait, 'motion', sourceCropImage), 'motion');
+  const sourcePitch = headposeDegree(modelOutput(sourceMotion, 'pitch'));
+  const sourceYaw = headposeDegree(modelOutput(sourceMotion, 'yaw'));
+  const sourceRoll = headposeDegree(modelOutput(sourceMotion, 'roll'));
+  const sourceT = flatten(modelOutput(sourceMotion, 't').data);
+  const sourceExp = flatten(modelOutput(sourceMotion, 'exp').data);
+  const sourceScale = flatten(modelOutput(sourceMotion, 'scale').data)[0];
+  const sourceKp = flatten(modelOutput(sourceMotion, 'kp').data);
+  const sourceR = rotationMatrix(sourcePitch, sourceYaw, sourceRoll);
+  const sourceCanonicalKp = transformKeypoints(sourcePitch, sourceYaw, sourceRoll, sourceT, sourceExp, sourceScale, sourceKp);
+
+  const nativeBatchRender = typeof options.mlxNativeRenderFrames === 'function';
+  const batchLimit = Math.max(1, Math.min(16, Number(options.nativeFrameBatchSize || 4)));
+
+  const idleMotion = MotionController.generateIdleMotion(frameCount, outputFps);
+  const outputFd = fs.openSync(options.outputRaw, 'w');
+  let pasteMap;
+  try {
+    for (let frame = 0; frame < frameCount; frame += batchLimit) {
+      const batchCount = Math.min(batchLimit, frameCount - frame);
+      const batchDriving = new Float32Array(batchCount * 63);
+
+      for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+        const currentFrame = frame + batchIndex;
+        const pose = idleMotion[currentFrame] || idleMotion[0];
+        const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
+        const combinedR = matMul(relR, sourceR, 3, 3, 3);
+        const scale = sourceScale;
+        const t = new Float32Array([
+          sourceT[0],
+          sourceT[1] + pose.t[1],
+          0,
+        ]);
+
+        // Facial expression 100% preserves source image neutral state (zero distortion)
+        const drivingKp = new Float32Array(63);
+        for (let point = 0; point < 21; ++point) {
+          for (let axis = 0; axis < 3; ++axis) {
+            let value = 0;
+            for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
+              value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
+            }
+            drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+          }
+          drivingKp[point * 3] += t[0];
+          drivingKp[point * 3 + 1] += t[1];
+        }
+
+        const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+        batchDriving.set(stitchedKp, batchIndex * 63);
+      }
+
+      if (nativeBatchRender) {
+        const rendered = await options.mlxNativeRenderFrames(
+          nativeRoot,
+          sourceCropBuffer,
+          256,
+          256,
+          batchDriving,
+          sourceCanonicalKp,
+        );
+        const bytes = rendered.data instanceof Uint8Array
+          ? rendered.data
+          : new Uint8Array(rendered.data);
+        const generatedWidth = Number(rendered.width);
+        const generatedHeight = Number(rendered.height);
+        const frameBytes = generatedWidth * generatedHeight * 3;
+        for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+          const generated = {
+            rgb: bytes.subarray(batchIndex * frameBytes, (batchIndex + 1) * frameBytes),
+            width: generatedWidth,
+            height: generatedHeight,
+          };
+          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
+          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
+        }
+      } else {
+        for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+          const oneDriving = batchDriving.subarray(batchIndex * 63, (batchIndex + 1) * 63);
+          const generatedBytes = await options.mlxNativeRenderFrame(
+            nativeRoot,
+            sourceCropBuffer,
+            256,
+            256,
+            oneDriving,
+            sourceCanonicalKp,
+          );
+          const generated = unpackNativeRgb(generatedBytes);
+          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
+          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
+        }
+      }
+    }
+  } finally {
+    fs.closeSync(outputFd);
+  }
+
+  return {
+    width,
+    height,
+    fps: outputFps,
+    frames: frameCount,
+    duration: frameCount / outputFps,
+  };
+}
+
+async function renderIdleLoop(options) {
+  if (!options || !options.sourceRgb || !Number.isInteger(options.width) ||
+      !Number.isInteger(options.height) || !options.outputRaw) {
+    throw new TypeError('renderIdleLoop requires sourceRgb, width, height, and outputRaw');
+  }
+  const inputSource = new Uint8Array(options.sourceRgb);
+  const inputWidth = options.width;
+  const inputHeight = options.height;
+  if (inputSource.length !== inputWidth * inputHeight * 3) {
+    throw new RangeError('sourceRgb size does not match width and height');
+  }
+  const maxDimension = options.maxDimension || 512;
+  const resizedSource = resizePackedRgb(inputSource, inputWidth, inputHeight, maxDimension);
+  const source = resizedSource.data;
+  const width = resizedSource.width;
+  const height = resizedSource.height;
+  const duration = options.duration !== undefined ? Math.max(1.0, Number(options.duration)) : 3.0;
+  const outputFps = options.outputFps !== undefined ? Number(options.outputFps) : 25;
+  if (!Number.isFinite(outputFps) || outputFps <= 0 || outputFps > 25) {
+    throw new RangeError('outputFps must be between 1 and 25');
+  }
+  const frameCount = Math.max(1, Math.round(duration * outputFps));
+
+  // 1. Apple Silicon Native MLX idle loop
+  if (options.backend === 'mlx' &&
+      (typeof options.mlxNativeRenderFrames === 'function' ||
+       typeof options.mlxNativeRenderFrame === 'function')) {
+    return await renderIdleLoopMlx(options, source, width, height, duration, outputFps);
+  }
+
+  // 2. ONNX idle loop (does NOT require JoyVASA!)
+  let portrait = options.portrait;
+  let warpingPortrait = options.warpingPortrait;
+  let detector = options.detector;
+
+  if (!portrait || !detector) {
+    const modelDir = options.modelDir || process.env.SHERPA_ONNX_FLP_MODEL_DIR;
+    if (!modelDir) throw new Error('modelDir is required for idle loop');
+    const provider = options.provider || defaultProvider();
+    const numThreads = options.numThreads || 2;
+    const warping = resolveWarpingModel(options);
+    const warpingModelPath = path.isAbsolute(warping.model) ? warping.model :
+      path.join(modelDir, warping.model);
+    if (!fs.existsSync(warpingModelPath)) {
+      throw new Error(
+        `Warping model for profile '${warping.profile}' was not found: ${warpingModelPath}. ` +
+        `Set the profile-specific model path or unset SHERPA_ONNX_FLP_WARPING_MODEL.`);
+    }
+    const faceDetectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
+    const faceLandmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
+    const warpingProvider = options.warpingProvider ||
+      process.env.SHERPA_ONNX_FLP_WARPING_PROVIDER || 'cpu';
+    const portraitModels = getFlpModels(modelDir, warpingModelPath);
+    if (provider !== warpingProvider) delete portraitModels.warpingSpade;
+
+    const [createdPortrait, createdWarpingPortrait, createdDetector] = await Promise.all([
+      FasterLivePortrait.create({
+        provider,
+        numThreads,
+        models: portraitModels,
+      }),
+      provider === warpingProvider
+        ? Promise.resolve(null)
+        : FasterLivePortrait.create({
+            provider: warpingProvider,
+            numThreads,
+            models: {warpingSpade: warpingModelPath},
+          }),
+      FaceDetector.create(resolveFaceDetectorOptions(options, faceDetectorModel, faceLandmarkModel)),
+    ]);
+    portrait = createdPortrait;
+    warpingPortrait = createdWarpingPortrait || createdPortrait;
+    detector = createdDetector;
+  } else if (!warpingPortrait) {
+    warpingPortrait = portrait;
+  }
+
+  const sourceImage = {data: source, width, height, channels: 3, format: 'rgb'};
+  const faces = await detectFacesAsync(detector, sourceImage);
+  if (faces.length === 0) throw new Error('No face found in source image');
+  const face = faces[0];
+  const faceWidth = face.bbox[2] - face.bbox[0];
+  const faceHeight = face.bbox[3] - face.bbox[1];
+  const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
+  const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
+  const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
+  const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
+  const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
+  const appearance = finiteOutputs(await portraitRunImage(portrait, 'appearance', sourceCropImage), 'appearance');
+  const sourceMotion = finiteOutputs(await portraitRunImage(portrait, 'motion', sourceCropImage), 'motion');
+  const sourcePitch = headposeDegree(modelOutput(sourceMotion, 'pitch'));
+  const sourceYaw = headposeDegree(modelOutput(sourceMotion, 'yaw'));
+  const sourceRoll = headposeDegree(modelOutput(sourceMotion, 'roll'));
+  const sourceT = flatten(modelOutput(sourceMotion, 't').data);
+  const sourceExp = flatten(modelOutput(sourceMotion, 'exp').data);
+  const sourceScale = flatten(modelOutput(sourceMotion, 'scale').data)[0];
+  const sourceKp = flatten(modelOutput(sourceMotion, 'kp').data);
+  const sourceR = rotationMatrix(sourcePitch, sourceYaw, sourceRoll);
+  const sourceCanonicalKp = transformKeypoints(sourcePitch, sourceYaw, sourceRoll, sourceT, sourceExp, sourceScale, sourceKp);
+
+  const sourceFeature = modelOutput(appearance, 'output');
+  const warpingModel = warpingPortrait.getModelInfo().models.find(
+      (model) => model.name === 'warpingSpade');
+  if (!warpingModel) throw new Error("Missing 'warpingSpade' model metadata");
+  const warpingFeatureInput = warpingModel.inputs.find(
+      (input) => input.name === 'feature_3d');
+  if (!warpingFeatureInput) throw new Error("Missing 'feature_3d' warping input metadata");
+  const warpingFeature = adaptFeature3d(sourceFeature, warpingFeatureInput.shape);
+
+  const idleMotion = MotionController.generateIdleMotion(frameCount, outputFps);
+  const outputFd = fs.openSync(options.outputRaw, 'w');
+  let pasteMap;
+  try {
+    for (let frame = 0; frame < frameCount; ++frame) {
+      const pose = idleMotion[frame] || idleMotion[0];
+      const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
+      const combinedR = matMul(relR, sourceR, 3, 3, 3);
+      const scale = sourceScale;
+      const t = new Float32Array([
+        sourceT[0],
+        sourceT[1] + pose.t[1],
+        0,
+      ]);
+
+      // Facial expression 100% preserves source image neutral state (zero distortion)
+      const drivingKp = new Float32Array(63);
+      for (let point = 0; point < 21; ++point) {
+        for (let axis = 0; axis < 3; ++axis) {
+          let value = 0;
+          for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
+            value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
+          }
+          drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+        }
+        drivingKp[point * 3] += t[0];
+        drivingKp[point * 3 + 1] += t[1];
+      }
+
+      const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+      const warped = finiteOutputs(await portraitRun(warpingPortrait, 'warpingSpade', [
+        {name: 'feature_3d', type: 'float32', shape: warpingFeature.shape, data: warpingFeature.data},
+        {name: 'kp_driving', type: 'float32', shape: [1, 21, 3], data: stitchedKp},
+        {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
+      ]), 'warpingSpade');
+      const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
+      if (!pasteMap) {
+        pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
+      }
+      fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+      if (typeof options.onFrame === 'function') {
+        options.onFrame(frame + 1, frameCount);
+      }
+    }
+  } finally {
+    fs.closeSync(outputFd);
+  }
+
+  return {
+    width,
+    height,
+    fps: outputFps,
+    frames: frameCount,
+    duration: frameCount / outputFps,
+  };
+}
+
 module.exports = {
   TALKING_VIDEO_DEFAULTS,
   createTalkingVideoOptions,
   createTalkingVideoPipeline,
+  createTalkingVideoPipelineAsync,
   renderTalkingVideo,
+  renderIdleLoop,
 };

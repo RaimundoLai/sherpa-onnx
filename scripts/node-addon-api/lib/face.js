@@ -40,6 +40,22 @@ class FaceDetector {
   /**
    * @param {FaceDetectorConfig|Object} configOrHandle
    */
+  /**
+   * Asynchronously create a face detector on an N-API worker thread.
+   * @param {FaceDetectorConfig|Object} config
+   * @returns {Promise<FaceDetector>}
+   */
+  static async create(config) {
+    const createAsync = addon.createFaceDetectorAsync || addon.createRetinaFaceDetectorAsync;
+    if (typeof createAsync === 'function') {
+      const handle = await createAsync(config);
+      const instance = new FaceDetector(handle);
+      instance.config = config;
+      return instance;
+    }
+    return new FaceDetector(config);
+  }
+
   constructor(configOrHandle) {
     if (configOrHandle && typeof configOrHandle === 'object' &&
         configOrHandle.model !== undefined) {

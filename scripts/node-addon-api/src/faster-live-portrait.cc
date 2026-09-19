@@ -151,6 +151,100 @@ CreateFasterLivePortraitModelSetWrapper(const Napi::CallbackInfo &info) {
       });
 }
 
+class CreateFasterLivePortraitModelSetWorker : public Napi::AsyncWorker {
+ public:
+  CreateFasterLivePortraitModelSetWorker(
+      Napi::Env env,
+      std::vector<std::string> names,
+      std::vector<std::string> paths,
+      std::string provider,
+      int32_t num_threads,
+      bool debug,
+      Napi::Promise::Deferred deferred)
+      : Napi::AsyncWorker(env),
+        names_(std::move(names)),
+        paths_(std::move(paths)),
+        provider_(std::move(provider)),
+        num_threads_(num_threads),
+        debug_(debug),
+        deferred_(deferred) {}
+
+  void Execute() override {
+    try {
+      std::vector<SherpaOnnxFasterLivePortraitModel> models(names_.size());
+      for (size_t i = 0; i != models.size(); ++i) {
+        models[i].name = names_[i].c_str();
+        models[i].path = paths_[i].c_str();
+      }
+      SherpaOnnxFasterLivePortraitConfig config{};
+      config.models = models.data();
+      config.num_models = static_cast<int32_t>(models.size());
+      config.num_threads = num_threads_;
+      config.provider = provider_.c_str();
+      config.debug = debug_ ? 1 : 0;
+      model_set_ = SherpaOnnxCreateFasterLivePortraitModelSet(&config);
+      if (!model_set_) {
+        SetError("Failed to create FasterLivePortrait model set; check model paths and provider");
+      }
+    } catch (const std::exception &e) {
+      SetError(e.what());
+    } catch (...) {
+      SetError("Failed to create FasterLivePortrait model set");
+    }
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    auto external = Napi::External<SherpaOnnxFasterLivePortraitModelSet>::New(
+        env, const_cast<SherpaOnnxFasterLivePortraitModelSet *>(model_set_),
+        [](Napi::Env /*env*/, SherpaOnnxFasterLivePortraitModelSet *value) {
+          SherpaOnnxDestroyFasterLivePortraitModelSet(value);
+        });
+    deferred_.Resolve(external);
+  }
+
+  void OnError(const Napi::Error &error) override {
+    deferred_.Reject(error.Value());
+  }
+
+ private:
+  std::vector<std::string> names_;
+  std::vector<std::string> paths_;
+  std::string provider_;
+  int32_t num_threads_ = 1;
+  bool debug_ = false;
+  Napi::Promise::Deferred deferred_;
+  const SherpaOnnxFasterLivePortraitModelSet *model_set_ = nullptr;
+};
+
+Napi::Value CreateFasterLivePortraitModelSetAsyncWrapper(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    ThrowTypeError(env,
+                   "createFasterLivePortraitModelSetAsync expects a config object");
+    return env.Null();
+  }
+  Napi::Object object = info[0].As<Napi::Object>();
+  std::vector<std::string> names;
+  std::vector<std::string> paths;
+  if (!ParseModels(env, object, &names, &paths)) return env.Null();
+
+  std::string provider = "cpu";
+  ReadString(object, "provider", &provider);
+  int32_t num_threads = 1;
+  ReadInt(object, "numThreads", &num_threads);
+  bool debug = false;
+  ReadBool(object, "debug", &debug);
+
+  auto deferred = Napi::Promise::Deferred::New(env);
+  auto *worker = new CreateFasterLivePortraitModelSetWorker(
+      env, std::move(names), std::move(paths), std::move(provider),
+      num_threads, debug, deferred);
+  worker->Queue();
+  return deferred.Promise();
+}
+
 Napi::String FasterLivePortraitGetModelInfoWrapper(
     const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -535,6 +629,9 @@ void InitFasterLivePortrait(Napi::Env env, Napi::Object exports) {
   exports.Set(
       "createFasterLivePortraitModelSet",
       Napi::Function::New(env, CreateFasterLivePortraitModelSetWrapper));
+  exports.Set(
+      "createFasterLivePortraitModelSetAsync",
+      Napi::Function::New(env, CreateFasterLivePortraitModelSetAsyncWrapper));
   exports.Set("fasterLivePortraitGetModelInfo",
               Napi::Function::New(env, FasterLivePortraitGetModelInfoWrapper));
   exports.Set("fasterLivePortraitRun",
