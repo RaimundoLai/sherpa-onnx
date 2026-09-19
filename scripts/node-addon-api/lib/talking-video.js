@@ -1418,8 +1418,6 @@ async function renderTalkingVideo(options) {
     const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
     const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
     const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
-    const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
-    const backgroundSource = translateExpressionSource(source, width, height, options);
     const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
     const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
     const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -1439,6 +1437,8 @@ async function renderTalkingVideo(options) {
     pipeline.sourceCache.set(sourceKey, sourceState);
   }
   const {face, cropSide, cropCenterX, cropCenterY, appearance, sourceT, sourceExp, sourceScale, sourceKp, sourceR, sourceCanonicalKp} = sourceState;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
 
   const sampleRate = options.audioSampleRate || 16000;
   const maxSamples = maxSeconds === 0 ? options.audioSamples.length : Math.max(1, Math.floor(maxSeconds * sampleRate));
