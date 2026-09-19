@@ -170,6 +170,111 @@ const LIVEPORTRAIT_MOUTH_EXPRESSION_INDICES = [6, 12, 14, 17, 19, 20];
 // high-frequency diffusion noise.
 const LIVEPORTRAIT_STABLE_EXPRESSION_INDICES = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10];
 
+/**
+ * Applies fine-grained facial expression retargeting deltas to a 63-element
+ * (21 keypoints x 3 axes) expression vector following the exact anatomical
+ * manifold and weights from KwaiVGI / KlingAI LivePortrait.
+ *
+ * All sliders modify coordinated landmark groups simultaneously (e.g. smile
+ * activates mouth corners, mouth center, lower eyelids, and cheekbones together)
+ * to guarantee lifelike deformation without facial tearing or collapse.
+ */
+function applyLivePortraitRetargeting(expDelta, expSettings) {
+  if (!expSettings || typeof expSettings !== 'object') return;
+
+  const smile = Number(expSettings.smile || 0);
+  const lipOpen = Number(expSettings.lipOpen || 0);
+  const grin = Number(expSettings.grin || 0);
+  const pouting = Number(expSettings.pouting || 0);
+  const pursing = Number(expSettings.pursing || 0);
+  const eyebrow = Number(expSettings.eyebrow || 0);
+  const gazeX = Number(expSettings.eyeGazeX ?? expSettings.eyeGaze ?? 0);
+  const gazeY = Number(expSettings.eyeGazeY || 0);
+  const wink = Number(expSettings.wink || 0);
+
+  // 1. Smile (KwaiVGI update_delta_new_smile)
+  if (smile !== 0) {
+    expDelta[20 * 3 + 1] += smile * -0.01;
+    expDelta[14 * 3 + 1] += smile * -0.02;
+    expDelta[17 * 3 + 1] += smile * 0.0065;
+    expDelta[17 * 3 + 2] += smile * 0.003;
+    expDelta[13 * 3 + 1] += smile * -0.00275;
+    expDelta[16 * 3 + 1] += smile * -0.00275;
+    expDelta[3 * 3 + 1]  += smile * -0.0035;
+    expDelta[7 * 3 + 1]  += smile * -0.0035;
+  }
+
+  // 2. Lip close <-> open (KwaiVGI update_delta_new_lip_variation_three)
+  if (lipOpen !== 0) {
+    expDelta[19 * 3 + 1] += lipOpen * 0.001;
+    expDelta[19 * 3 + 2] += lipOpen * 0.0001;
+    expDelta[17 * 3 + 1] += lipOpen * -0.0001;
+  }
+
+  // 3. Eyebrow raise/furrow (KwaiVGI update_delta_new_eyebrow)
+  if (eyebrow !== 0) {
+    if (eyebrow > 0) {
+      expDelta[1 * 3 + 1] += eyebrow * 0.001;
+      expDelta[2 * 3 + 1] += eyebrow * -0.001;
+    } else {
+      expDelta[1 * 3 + 0] += eyebrow * -0.001;
+      expDelta[2 * 3 + 0] += eyebrow * 0.001;
+      expDelta[1 * 3 + 1] += eyebrow * 0.0003;
+      expDelta[2 * 3 + 1] += eyebrow * -0.0003;
+    }
+  }
+
+  // 4. Eye Gaze Direction (KwaiVGI update_delta_new_eyeball_direction)
+  if (gazeX !== 0 || gazeY !== 0) {
+    if (gazeX > 0) {
+      expDelta[11 * 3 + 0] += gazeX * 0.0007;
+      expDelta[15 * 3 + 0] += gazeX * 0.001;
+    } else {
+      expDelta[11 * 3 + 0] += gazeX * 0.001;
+      expDelta[15 * 3 + 0] += gazeX * 0.0007;
+    }
+    expDelta[11 * 3 + 1] += gazeY * -0.001;
+    expDelta[15 * 3 + 1] += gazeY * -0.001;
+    const blink = -gazeY / 2.0;
+    expDelta[11 * 3 + 1] += blink * -0.001;
+    expDelta[13 * 3 + 1] += blink * 0.0003;
+    expDelta[15 * 3 + 1] += blink * -0.001;
+    expDelta[16 * 3 + 1] += blink * 0.0003;
+  }
+
+  // 5. Wink (KwaiVGI update_delta_new_wink)
+  if (wink !== 0) {
+    expDelta[11 * 3 + 1] += wink * 0.001;
+    expDelta[13 * 3 + 1] += wink * -0.0003;
+    expDelta[17 * 3 + 0] += wink * 0.0003;
+    expDelta[17 * 3 + 1] += wink * 0.0003;
+    expDelta[3 * 3 + 1]  += wink * -0.0003;
+  }
+
+  // 6. Grin (KwaiVGI update_delta_new_lip_variation_two)
+  if (grin !== 0) {
+    expDelta[20 * 3 + 2] += grin * -0.001;
+    expDelta[20 * 3 + 1] += grin * -0.001;
+    expDelta[14 * 3 + 1] += grin * -0.001;
+  }
+
+  // 7. Pouting (KwaiVGI update_delta_new_lip_variation_zero)
+  if (pouting !== 0) {
+    expDelta[19 * 3 + 0] += pouting * 0.01;
+  }
+
+  // 8. Pursing (KwaiVGI update_delta_new_lip_variation_one)
+  if (pursing !== 0) {
+    expDelta[14 * 3 + 1] += pursing * 0.001;
+    expDelta[3 * 3 + 1]  += pursing * -0.0005;
+    expDelta[7 * 3 + 1]  += pursing * -0.0005;
+    expDelta[17 * 3 + 2] += pursing * -0.0005;
+  }
+
+  // Framing is applied as a rigid translation below. Do not also move a
+  // single landmark here, which stretches the face and causes ghosting.
+}
+
 // JoyVASA's expression channels (especially jaw/lips) must remain responsive,
 // but the diffusion output can contain small high-frequency frame noise. Smooth
 // the rigid pose, eyelids, and mouth groups independently so lip-sync remains
@@ -497,6 +602,38 @@ function createPasteMap(width, height, centerX, centerY, side, generatedWidth, g
     }
   }
   return {x0, y0, dx, dy, alpha};
+}
+
+function getExpressionPasteCenter(options, width, height, centerX, centerY) {
+  const settings = options?.expressionSettings || {};
+  const movementX = Math.max(-0.1, Math.min(0.1, Number(settings.movementX ?? settings.scaleX ?? 0)));
+  const movementY = Math.max(-0.1, Math.min(0.1, Number(settings.movementY ?? settings.scaleY ?? 0)));
+  return {
+    x: centerX + movementX * width * 0.2,
+    y: centerY + movementY * height * 0.2,
+  };
+}
+
+function translateExpressionSource(source, width, height, options) {
+  const settings = options?.expressionSettings || {};
+  const movementX = Math.max(-0.1, Math.min(0.1, Number(settings.movementX ?? settings.scaleX ?? 0)));
+  const movementY = Math.max(-0.1, Math.min(0.1, Number(settings.movementY ?? settings.scaleY ?? 0)));
+  const offsetX = Math.round(movementX * width * 0.2);
+  const offsetY = Math.round(movementY * height * 0.2);
+  if (offsetX === 0 && offsetY === 0) return source;
+  const output = new Uint8Array(source.length);
+  for (let y = 0; y < height; ++y) {
+    const sourceY = Math.max(0, Math.min(height - 1, y - offsetY));
+    for (let x = 0; x < width; ++x) {
+      const sourceX = Math.max(0, Math.min(width - 1, x - offsetX));
+      const destinationOffset = (y * width + x) * 3;
+      const sourceOffset = (sourceY * width + sourceX) * 3;
+      output[destinationOffset] = source[sourceOffset];
+      output[destinationOffset + 1] = source[sourceOffset + 1];
+      output[destinationOffset + 2] = source[sourceOffset + 2];
+    }
+  }
+  return output;
 }
 
 function pasteBackWithMap(source, generated, width, height, map) {
@@ -835,6 +972,8 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
   const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -962,16 +1101,44 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
         );
         const rawCurrent = decodeMotion(motion.slice(selectedMotionFrame * motionDim,
           (selectedMotionFrame + 1) * motionDim));
-        const gestureDeltas = MotionController.evaluateGestures(
-          outputFrame,
-          speechAnalysis.events,
-          outputFps,
-          gestureScale
-        );
-        rawCurrent.pitch += gestureDeltas.deltaPitch;
-        rawCurrent.yaw += gestureDeltas.deltaYaw;
-        rawCurrent.roll += gestureDeltas.deltaRoll;
-        rawCurrent.t[1] += gestureDeltas.deltaTy;
+        if (options.drivingMotion?.frames?.length) {
+          const dFrames = options.drivingMotion.frames;
+          const dPose = dFrames[outputFrame % dFrames.length];
+          const basePose = dFrames[0];
+          const relPitch = dPose.deltaPitch !== undefined ? dPose.deltaPitch : (dPose.pitch - basePose.pitch);
+          const relYaw = dPose.deltaYaw !== undefined ? dPose.deltaYaw : (dPose.yaw - basePose.yaw);
+          const relRoll = dPose.deltaRoll !== undefined ? dPose.deltaRoll : (dPose.roll - basePose.roll);
+          const deltaT = dPose.deltaT || (dPose.t ? [dPose.t[0] - basePose.t[0], dPose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+
+          rawCurrent.pitch = firstMotion.pitch + relPitch;
+          rawCurrent.yaw = firstMotion.yaw + relYaw;
+          rawCurrent.roll = firstMotion.roll + relRoll;
+          rawCurrent.t[0] = firstMotion.t[0] + deltaT[0];
+          rawCurrent.t[1] = firstMotion.t[1] + deltaT[1];
+
+          const expOffset = dPose.deltaExp || (dPose.exp && basePose.exp ? dPose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+          if (expOffset) {
+            const mouthIndices = [6, 12, 14, 17, 19, 20];
+            for (let point = 0; point < 21; ++point) {
+              if (!mouthIndices.includes(point)) {
+                for (let axis = 0; axis < 3; ++axis) {
+                  rawCurrent.exp[point * 3 + axis] += expOffset[point * 3 + axis] * 0.75;
+                }
+              }
+            }
+          }
+        } else {
+          const gestureDeltas = MotionController.evaluateGestures(
+            outputFrame,
+            speechAnalysis.events,
+            outputFps,
+            gestureScale
+          );
+          rawCurrent.pitch += gestureDeltas.deltaPitch;
+          rawCurrent.yaw += gestureDeltas.deltaYaw;
+          rawCurrent.roll += gestureDeltas.deltaRoll;
+          rawCurrent.t[1] += gestureDeltas.deltaTy;
+        }
         const current = smoothMotion(
           previousRigidPose,
           rawCurrent,
@@ -1034,9 +1201,9 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
             width: generatedWidth,
             height: generatedHeight,
           };
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY,
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
@@ -1052,9 +1219,9 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
             sourceCanonicalKp,
           );
           const generated = unpackNativeRgb(generatedBytes);
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY,
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
@@ -1251,6 +1418,8 @@ async function renderTalkingVideo(options) {
     const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
     const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
     const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+    const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+    const backgroundSource = translateExpressionSource(source, width, height, options);
     const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
     const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
     const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -1341,16 +1510,44 @@ async function renderTalkingVideo(options) {
         motionFrame * joy.motionFeatDim,
         (motionFrame + 1) * joy.motionFeatDim,
       ));
-      const gestureDeltas = MotionController.evaluateGestures(
-        frame,
-        speechAnalysis.events,
-        fps,
-        gestureScale
-      );
-      rawCurrent.pitch += gestureDeltas.deltaPitch;
-      rawCurrent.yaw += gestureDeltas.deltaYaw;
-      rawCurrent.roll += gestureDeltas.deltaRoll;
-      rawCurrent.t[1] += gestureDeltas.deltaTy;
+      if (options.drivingMotion?.frames?.length) {
+        const dFrames = options.drivingMotion.frames;
+        const dPose = dFrames[frame % dFrames.length];
+        const basePose = dFrames[0];
+        const relPitch = dPose.deltaPitch !== undefined ? dPose.deltaPitch : (dPose.pitch - basePose.pitch);
+        const relYaw = dPose.deltaYaw !== undefined ? dPose.deltaYaw : (dPose.yaw - basePose.yaw);
+        const relRoll = dPose.deltaRoll !== undefined ? dPose.deltaRoll : (dPose.roll - basePose.roll);
+        const deltaT = dPose.deltaT || (dPose.t ? [dPose.t[0] - basePose.t[0], dPose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+
+        rawCurrent.pitch = firstMotion.pitch + relPitch;
+        rawCurrent.yaw = firstMotion.yaw + relYaw;
+        rawCurrent.roll = firstMotion.roll + relRoll;
+        rawCurrent.t[0] = firstMotion.t[0] + deltaT[0];
+        rawCurrent.t[1] = firstMotion.t[1] + deltaT[1];
+
+        const expOffset = dPose.deltaExp || (dPose.exp && basePose.exp ? dPose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+        if (expOffset) {
+          const mouthIndices = [6, 12, 14, 17, 19, 20];
+          for (let point = 0; point < 21; ++point) {
+            if (!mouthIndices.includes(point)) {
+              for (let axis = 0; axis < 3; ++axis) {
+                rawCurrent.exp[point * 3 + axis] += expOffset[point * 3 + axis] * 0.75;
+              }
+            }
+          }
+        }
+      } else {
+        const gestureDeltas = MotionController.evaluateGestures(
+          frame,
+          speechAnalysis.events,
+          fps,
+          gestureScale
+        );
+        rawCurrent.pitch += gestureDeltas.deltaPitch;
+        rawCurrent.yaw += gestureDeltas.deltaYaw;
+        rawCurrent.roll += gestureDeltas.deltaRoll;
+        rawCurrent.t[1] += gestureDeltas.deltaTy;
+      }
       const current = smoothMotion(
         previousRigidPose,
         rawCurrent,
@@ -1384,8 +1581,8 @@ async function renderTalkingVideo(options) {
         {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
       ]), 'warpingSpade');
       const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
-      if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-      fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+      if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+      fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
       if (typeof options.onFrame === 'function') options.onFrame(frame + 1, frameCount);
     }
   } finally {
@@ -1440,6 +1637,8 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
   const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -1469,17 +1668,58 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
 
       for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
         const currentFrame = frame + batchIndex;
-        const pose = idleMotion[currentFrame] || idleMotion[0];
-        const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
-        const combinedR = matMul(relR, sourceR, 3, 3, 3);
-        const scale = sourceScale;
-        const t = new Float32Array([
-          sourceT[0],
-          sourceT[1] + pose.t[1],
-          0,
-        ]);
+        let combinedR;
+        let t;
+        let expOffset = null;
+        const expSettings = options.expressionSettings || {};
+        const relPitchOffset = Number(expSettings.relativePitch || 0);
+        const relYawOffset = Number(expSettings.relativeYaw || 0);
+        const relRollOffset = Number(expSettings.relativeRoll || 0);
+        const movX = Number(expSettings.movementX ?? expSettings.scaleX ?? 0);
+        const movY = Number(expSettings.movementY ?? expSettings.scaleY ?? 0);
+        const scaleZ = (expSettings.movementZ !== undefined && Number(expSettings.movementZ) > 0)
+          ? Number(expSettings.movementZ)
+          : (expSettings.scaleZ !== undefined && Number(expSettings.scaleZ) > 0 ? Number(expSettings.scaleZ) : 1.0);
+        const allowFullExp = options.allowFullExpression !== false;
 
-        // Facial expression 100% preserves source image neutral state (zero distortion)
+        if (options.drivingMotion?.frames?.length) {
+          const dFrames = options.drivingMotion.frames;
+          const pose = dFrames[currentFrame % dFrames.length];
+          const basePose = dFrames[0];
+          const relPitch = pose.deltaPitch !== undefined ? pose.deltaPitch : (pose.pitch - basePose.pitch);
+          const relYaw = pose.deltaYaw !== undefined ? pose.deltaYaw : (pose.yaw - basePose.yaw);
+          const relRoll = pose.deltaRoll !== undefined ? pose.deltaRoll : (pose.roll - basePose.roll);
+          const relR = rotationMatrix(relPitch + relPitchOffset, relYaw + relYawOffset, relRoll + relRollOffset);
+          combinedR = matMul(relR, sourceR, 3, 3, 3);
+          const deltaT = pose.deltaT || (pose.t ? [pose.t[0] - basePose.t[0], pose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+          t = new Float32Array([
+            sourceT[0] + deltaT[0],
+            sourceT[1] + deltaT[1],
+            0,
+          ]);
+          expOffset = pose.deltaExp || (pose.exp && basePose.exp ? pose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+        } else {
+          const pose = idleMotion[currentFrame] || idleMotion[0];
+          const relR = rotationMatrix(pose.pitch + relPitchOffset, pose.yaw + relYawOffset, pose.roll + relRollOffset);
+          combinedR = matMul(relR, sourceR, 3, 3, 3);
+        t = new Float32Array([
+            sourceT[0],
+            sourceT[1] + pose.t[1],
+            0,
+          ]);
+        }
+      const scale = sourceScale * scaleZ;
+        const mouthIndices = [6, 12, 14, 17, 19, 20];
+        const expDelta = new Float32Array(63);
+        for (let point = 0; point < 21; ++point) {
+          for (let axis = 0; axis < 3; ++axis) {
+            const idx = point * 3 + axis;
+            const expDeltaVal = (expOffset && (allowFullExp || !mouthIndices.includes(point))) ? expOffset[idx] : 0;
+            expDelta[idx] = sourceExp[idx] + expDeltaVal;
+          }
+        }
+        applyLivePortraitRetargeting(expDelta, expSettings);
+
         const drivingKp = new Float32Array(63);
         for (let point = 0; point < 21; ++point) {
           for (let axis = 0; axis < 3; ++axis) {
@@ -1487,7 +1727,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
               value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
             }
-            drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+            drivingKp[point * 3 + axis] = scale * (value + expDelta[point * 3 + axis]);
           }
           drivingKp[point * 3] += t[0];
           drivingKp[point * 3 + 1] += t[1];
@@ -1518,8 +1758,8 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             width: generatedWidth,
             height: generatedHeight,
           };
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
@@ -1534,8 +1774,8 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             sourceCanonicalKp,
           );
           const generated = unpackNativeRgb(generatedBytes);
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
@@ -1639,6 +1879,8 @@ async function renderIdleLoop(options) {
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
   const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -1668,17 +1910,58 @@ async function renderIdleLoop(options) {
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; ++frame) {
-      const pose = idleMotion[frame] || idleMotion[0];
-      const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
-      const combinedR = matMul(relR, sourceR, 3, 3, 3);
-      const scale = sourceScale;
-      const t = new Float32Array([
-        sourceT[0],
-        sourceT[1] + pose.t[1],
-        0,
-      ]);
+      let combinedR;
+      let t;
+      let expOffset = null;
+      const expSettings = options.expressionSettings || {};
+      const relPitchOffset = Number(expSettings.relativePitch || 0);
+      const relYawOffset = Number(expSettings.relativeYaw || 0);
+      const relRollOffset = Number(expSettings.relativeRoll || 0);
+      const movX = Number(expSettings.movementX ?? expSettings.scaleX ?? 0);
+      const movY = Number(expSettings.movementY ?? expSettings.scaleY ?? 0);
+      const scaleZ = (expSettings.movementZ !== undefined && Number(expSettings.movementZ) > 0)
+        ? Number(expSettings.movementZ)
+        : (expSettings.scaleZ !== undefined && Number(expSettings.scaleZ) > 0 ? Number(expSettings.scaleZ) : 1.0);
+      const allowFullExp = options.allowFullExpression !== false;
 
-      // Facial expression 100% preserves source image neutral state (zero distortion)
+      if (options.drivingMotion?.frames?.length) {
+        const dFrames = options.drivingMotion.frames;
+        const pose = dFrames[frame % dFrames.length];
+        const basePose = dFrames[0];
+        const relPitch = pose.deltaPitch !== undefined ? pose.deltaPitch : (pose.pitch - basePose.pitch);
+        const relYaw = pose.deltaYaw !== undefined ? pose.deltaYaw : (pose.yaw - basePose.yaw);
+        const relRoll = pose.deltaRoll !== undefined ? pose.deltaRoll : (pose.roll - basePose.roll);
+        const relR = rotationMatrix(relPitch + relPitchOffset, relYaw + relYawOffset, relRoll + relRollOffset);
+        combinedR = matMul(relR, sourceR, 3, 3, 3);
+        const deltaT = pose.deltaT || (pose.t ? [pose.t[0] - basePose.t[0], pose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+        t = new Float32Array([
+          sourceT[0] + deltaT[0],
+          sourceT[1] + deltaT[1],
+          0,
+        ]);
+        expOffset = pose.deltaExp || (pose.exp && basePose.exp ? pose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+      } else {
+        const pose = idleMotion[frame] || idleMotion[0];
+        const relR = rotationMatrix(pose.pitch + relPitchOffset, pose.yaw + relYawOffset, pose.roll + relRollOffset);
+        combinedR = matMul(relR, sourceR, 3, 3, 3);
+        t = new Float32Array([
+          sourceT[0],
+          sourceT[1] + pose.t[1],
+          0,
+        ]);
+      }
+      const scale = sourceScale * scaleZ;
+      const mouthIndices = [6, 12, 14, 17, 19, 20];
+      const expDelta = new Float32Array(63);
+      for (let point = 0; point < 21; ++point) {
+        for (let axis = 0; axis < 3; ++axis) {
+          const idx = point * 3 + axis;
+          const expDeltaVal = (expOffset && (allowFullExp || !mouthIndices.includes(point))) ? expOffset[idx] : 0;
+          expDelta[idx] = sourceExp[idx] + expDeltaVal;
+        }
+      }
+      applyLivePortraitRetargeting(expDelta, expSettings);
+
       const drivingKp = new Float32Array(63);
       for (let point = 0; point < 21; ++point) {
         for (let axis = 0; axis < 3; ++axis) {
@@ -1686,7 +1969,7 @@ async function renderIdleLoop(options) {
           for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
             value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
           }
-          drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+          drivingKp[point * 3 + axis] = scale * (value + expDelta[point * 3 + axis]);
         }
         drivingKp[point * 3] += t[0];
         drivingKp[point * 3 + 1] += t[1];
@@ -1700,9 +1983,9 @@ async function renderIdleLoop(options) {
       ]), 'warpingSpade');
       const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
       if (!pasteMap) {
-        pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
+        pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
       }
-      fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+      fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
       if (typeof options.onFrame === 'function') {
         options.onFrame(frame + 1, frameCount);
       }
