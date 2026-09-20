@@ -1609,7 +1609,16 @@ async function renderTalkingVideo(options) {
  * using FasterLivePortrait warping without audio.
  */
 
+function throwIfIdleRenderAborted(options) {
+  if (typeof options?.shouldAbort === 'function' && options.shouldAbort()) {
+    const error = new Error('Avatar idle rendering aborted.');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
 async function renderIdleLoopMlx(options, source, width, height, duration, outputFps) {
+  throwIfIdleRenderAborted(options);
   const frameCount = Math.max(1, Math.round(duration * outputFps));
   const nativeRoot = options.mlxWeightsDir || options.modelDir;
   if (!nativeRoot) throw new Error('Native MLX weights directory is required');
@@ -1663,10 +1672,12 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; frame += batchLimit) {
+      throwIfIdleRenderAborted(options);
       const batchCount = Math.min(batchLimit, frameCount - frame);
       const batchDriving = new Float32Array(batchCount * 63);
 
       for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+        throwIfIdleRenderAborted(options);
         const currentFrame = frame + batchIndex;
         let combinedR;
         let t;
@@ -1746,6 +1757,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
           batchDriving,
           sourceCanonicalKp,
         );
+        throwIfIdleRenderAborted(options);
         const bytes = rendered.data instanceof Uint8Array
           ? rendered.data
           : new Uint8Array(rendered.data);
@@ -1764,6 +1776,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
         }
       } else {
         for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+          throwIfIdleRenderAborted(options);
           const oneDriving = batchDriving.subarray(batchIndex * 63, (batchIndex + 1) * 63);
           const generatedBytes = await options.mlxNativeRenderFrame(
             nativeRoot,
@@ -1773,6 +1786,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             oneDriving,
             sourceCanonicalKp,
           );
+          throwIfIdleRenderAborted(options);
           const generated = unpackNativeRgb(generatedBytes);
           if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
           fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
@@ -1794,6 +1808,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
 }
 
 async function renderIdleLoop(options) {
+  throwIfIdleRenderAborted(options);
   if (!options || !options.sourceRgb || !Number.isInteger(options.width) ||
       !Number.isInteger(options.height) || !options.outputRaw) {
     throw new TypeError('renderIdleLoop requires sourceRgb, width, height, and outputRaw');
@@ -1910,6 +1925,7 @@ async function renderIdleLoop(options) {
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; ++frame) {
+      throwIfIdleRenderAborted(options);
       let combinedR;
       let t;
       let expOffset = null;
@@ -1976,11 +1992,13 @@ async function renderIdleLoop(options) {
       }
 
       const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+      throwIfIdleRenderAborted(options);
       const warped = finiteOutputs(await portraitRun(warpingPortrait, 'warpingSpade', [
         {name: 'feature_3d', type: 'float32', shape: warpingFeature.shape, data: warpingFeature.data},
         {name: 'kp_driving', type: 'float32', shape: [1, 21, 3], data: stitchedKp},
         {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
       ]), 'warpingSpade');
+      throwIfIdleRenderAborted(options);
       const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
       if (!pasteMap) {
         pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
