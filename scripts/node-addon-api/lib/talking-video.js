@@ -771,7 +771,7 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
   if (!modelDir) throw new Error('modelDir is required for MLX MediaPipe detection');
   const detectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
-  const detector = new FaceDetector(resolveFaceDetectorOptions(
+  const detector = await FaceDetector.create(resolveFaceDetectorOptions(
     {...options, provider: options.detectorProvider || options.provider || 'cpu'},
     detectorModel,
     landmarkModel,
@@ -958,12 +958,14 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const detectorModel = resolveFaceDetectorModel(options.modelDir || nativeRoot, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(options.modelDir || nativeRoot, options.faceLandmarkModel);
   const provider = options.provider || defaultProvider();
-  const portrait = new FasterLivePortrait({
-    provider,
-    numThreads: options.numThreads || 2,
-    models: {motion: motionPath, stitching: stitchingPath},
-  });
-  const detector = new FaceDetector(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
+  const [portrait, detector] = await Promise.all([
+    FasterLivePortrait.create({
+      provider,
+      numThreads: options.numThreads || 2,
+      models: {motion: motionPath, stitching: stitchingPath},
+    }),
+    FaceDetector.create(resolveFaceDetectorOptions(options, detectorModel, landmarkModel)),
+  ]);
   const faces = await detectFacesAsync(detector, {data: source, width, height, channels: 3, format: 'rgb'});
   if (!faces.length) throw new Error('No face found in source image');
   const face = faces[0];
@@ -997,7 +999,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
     Math.max(1, Math.floor(maxSeconds * sampleRate));
   const audioSamples = options.audioSamples.length > maxSamples
     ? options.audioSamples.slice(0, maxSamples) : options.audioSamples;
-  const joyConfig = JSON.parse(fs.readFileSync(joyMetadata, 'utf8'));
+  const joyConfig = JSON.parse(await fs.promises.readFile(joyMetadata, 'utf8'));
   const joyMotionConfig = joyConfig.motion || {};
   const motionFps = Number(joyMotionConfig.fps || joyConfig.audioInput?.fps || 25);
   const motionDim = Number(joyMotionConfig.motionFeatDim || 73);
@@ -1071,7 +1073,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const frameCount = Math.max(1, Math.ceil(motionFrameCount / motionFps * outputFps));
   const firstMotion = decodeMotion(motion.slice(0, motionDim));
   const firstR = rotationMatrix(firstMotion.pitch, firstMotion.yaw, firstMotion.roll);
-  const outputFd = fs.openSync(options.outputRaw, 'w');
+  const outputFile = await fs.promises.open(options.outputRaw, 'w');
   const sourceCropBuffer = Buffer.from(sourceCrop256);
   // A small bounded batch removes most JS↔Rust↔Swift call overhead while
   // keeping Metal's transient allocations bounded. ONNX remains on its
@@ -1120,10 +1122,15 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
           if (expOffset) {
             const mouthIndices = [6, 12, 14, 17, 19, 20];
             for (let point = 0; point < 21; ++point) {
-              if (!mouthIndices.includes(point)) {
-                for (let axis = 0; axis < 3; ++axis) {
-                  rawCurrent.exp[point * 3 + axis] += expOffset[point * 3 + axis] * 0.75;
-                }
+              const isMouthPoint = mouthIndices.includes(point);
+              for (let axis = 0; axis < 3; ++axis) {
+                const index = point * 3 + axis;
+                const audioDelta = rawCurrent.exp[index] - firstMotion.exp[index];
+                // Preserve the reference mouth shape, then add the audio
+                // mouth delta so the expression follows the spoken phonemes.
+                rawCurrent.exp[index] = firstMotion.exp[index] +
+                  expOffset[index] * (isMouthPoint ? 1.0 : 0.75) +
+                  (isMouthPoint ? audioDelta : 0);
               }
             }
           }
@@ -1203,7 +1210,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
           };
           if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
@@ -1221,14 +1228,14 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
           const generated = unpackNativeRgb(generatedBytes);
           if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
       frame = batchEnd;
     }
   } finally {
-    fs.closeSync(outputFd);
+    await outputFile.close();
   }
   return {
     width,
@@ -1529,10 +1536,15 @@ async function renderTalkingVideo(options) {
         if (expOffset) {
           const mouthIndices = [6, 12, 14, 17, 19, 20];
           for (let point = 0; point < 21; ++point) {
-            if (!mouthIndices.includes(point)) {
-              for (let axis = 0; axis < 3; ++axis) {
-                rawCurrent.exp[point * 3 + axis] += expOffset[point * 3 + axis] * 0.75;
-              }
+            const isMouthPoint = mouthIndices.includes(point);
+            for (let axis = 0; axis < 3; ++axis) {
+              const index = point * 3 + axis;
+              const audioDelta = rawCurrent.exp[index] - firstMotion.exp[index];
+              // Preserve the reference mouth shape, then add the audio
+              // mouth delta so the expression follows the spoken phonemes.
+              rawCurrent.exp[index] = firstMotion.exp[index] +
+                expOffset[index] * (isMouthPoint ? 1.0 : 0.75) +
+                (isMouthPoint ? audioDelta : 0);
             }
           }
         }
@@ -1668,7 +1680,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
   const batchLimit = Math.max(1, Math.min(16, Number(options.nativeFrameBatchSize || 4)));
 
   const idleMotion = MotionController.generateIdleMotion(frameCount, outputFps);
-  const outputFd = fs.openSync(options.outputRaw, 'w');
+  const outputFile = await fs.promises.open(options.outputRaw, 'w');
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; frame += batchLimit) {
@@ -1771,7 +1783,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             height: generatedHeight,
           };
           if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
@@ -1789,13 +1801,13 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
           throwIfIdleRenderAborted(options);
           const generated = unpackNativeRgb(generatedBytes);
           if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
     }
   } finally {
-    fs.closeSync(outputFd);
+    await outputFile.close();
   }
 
   return {
