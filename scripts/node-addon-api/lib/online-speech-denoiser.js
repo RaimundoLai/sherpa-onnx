@@ -7,37 +7,73 @@ const addon = require('./addon.js');
 
 class OnlineSpeechDenoiser {
   /**
-   * @param {OnlineSpeechDenoiserConfig} config
+   * @param {OnlineSpeechDenoiserConfig|OnlineSpeechDenoiserHandle} configOrHandle
    */
-  constructor(config) {
-    this.handle = addon.createOnlineSpeechDenoiser(config);
-    this.config = config;
+  constructor(configOrHandle) {
+    if (configOrHandle && typeof configOrHandle === 'object' &&
+        (configOrHandle.model !== undefined || configOrHandle.dpdfnet !== undefined || configOrHandle.gtcrn !== undefined)) {
+      this.config = configOrHandle;
+      this.handle = addon.createOnlineSpeechDenoiser(configOrHandle);
+    } else {
+      this.handle = configOrHandle;
+    }
 
-    this.sampleRate =
-        addon.onlineSpeechDenoiserGetSampleRateWrapper(this.handle);
+    this.sampleRate = addon.onlineSpeechDenoiserGetSampleRateWrapper(this.handle);
     this.frameShiftInSamples =
         addon.onlineSpeechDenoiserGetFrameShiftInSamplesWrapper(this.handle);
+    this.operationQueue = Promise.resolve();
   }
 
   /**
+   * Create a denoiser without blocking Node.js while ONNX Runtime loads the model.
+   * @param {OnlineSpeechDenoiserConfig} config
+   * @returns {Promise<OnlineSpeechDenoiser>}
+   */
+  static async createAsync(config) {
+    const handle = await addon.createOnlineSpeechDenoiserAsync(config);
+    return new OnlineSpeechDenoiser(handle);
+  }
+
+  /**
+   * Serialize operations because the underlying streaming denoiser is stateful.
+   * @template T
+   * @param {() => Promise<T>} operation
+   * @returns {Promise<T>}
+   */
+  enqueue(operation) {
+    const result = this.operationQueue.then(operation, operation);
+    this.operationQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  /**
+   * Process one chunk without blocking Node.js.
    * @param {AudioProcessRequest} obj
-   * @returns {GeneratedAudio}
+   * @returns {Promise<GeneratedAudio>}
    */
   run(obj) {
-    return addon.onlineSpeechDenoiserRunWrapper(this.handle, obj);
+    return this.enqueue(() =>
+      addon.onlineSpeechDenoiserRunAsyncWrapper(this.handle, obj));
   }
 
   /**
+   * Flush buffered output and reset the streaming state without blocking Node.js.
    * @param {boolean} [enableExternalBuffer=true]
-   * @returns {GeneratedAudio}
+   * @returns {Promise<GeneratedAudio>}
    */
   flush(enableExternalBuffer = true) {
-    return addon.onlineSpeechDenoiserFlushWrapper(
-        this.handle, enableExternalBuffer);
+    return this.enqueue(() =>
+      addon.onlineSpeechDenoiserFlushAsyncWrapper(
+          this.handle, enableExternalBuffer));
   }
 
+  /**
+   * Reset the streaming state without blocking Node.js.
+   * @returns {Promise<void>}
+   */
   reset() {
-    addon.onlineSpeechDenoiserResetWrapper(this.handle);
+    return this.enqueue(() =>
+      addon.onlineSpeechDenoiserResetAsyncWrapper(this.handle));
   }
 }
 

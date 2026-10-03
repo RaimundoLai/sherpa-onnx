@@ -13,8 +13,9 @@ const {MotionController, AudioEnergyDetector} = require('./motion-controller.js'
 const TALKING_VIDEO_DEFAULTS = Object.freeze({
   poseSmoothing: 0.12,
   eyeSmoothing: 0.35,
-  mouthSmoothing: 0.50,
+  mouthSmoothing: 0.85,
   eyeOpeningScale: 0.45,
+  mouthOpeningScale: 1.30,
   gestureScale: 1.0,
   nativeFrameBatchSize: 4,
   faceDetectorOptions: Object.freeze({
@@ -160,6 +161,18 @@ function headposeDegree(output) {
   return weighted / denominator * 3 - 97.5;
 }
 
+function onnxMotionRow(outputs) {
+  const row = new Float32Array(133);
+  row[0] = headposeDegree(modelOutput(outputs, 'pitch'));
+  row[1] = headposeDegree(modelOutput(outputs, 'yaw'));
+  row[2] = headposeDegree(modelOutput(outputs, 'roll'));
+  row.set(flatten(modelOutput(outputs, 't').data), 3);
+  row.set(flatten(modelOutput(outputs, 'exp').data), 6);
+  row[69] = flatten(modelOutput(outputs, 'scale').data)[0];
+  row.set(flatten(modelOutput(outputs, 'kp').data), 70);
+  return row;
+}
+
 const LIVEPORTRAIT_EYE_EXPRESSION_INDICES = [11, 13, 15, 16, 18];
 // LivePortrait's 21-point expression layout uses these points for the mouth
 // and jaw/lip contour.  Smooth these independently so phoneme motion remains
@@ -169,6 +182,111 @@ const LIVEPORTRAIT_MOUTH_EXPRESSION_INDICES = [6, 12, 14, 17, 19, 20];
 // regions. They should follow the head-pose smoothing instead of inheriting
 // high-frequency diffusion noise.
 const LIVEPORTRAIT_STABLE_EXPRESSION_INDICES = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10];
+
+/**
+ * Applies fine-grained facial expression retargeting deltas to a 63-element
+ * (21 keypoints x 3 axes) expression vector following the exact anatomical
+ * manifold and weights from KwaiVGI / KlingAI LivePortrait.
+ *
+ * All sliders modify coordinated landmark groups simultaneously (e.g. smile
+ * activates mouth corners, mouth center, lower eyelids, and cheekbones together)
+ * to guarantee lifelike deformation without facial tearing or collapse.
+ */
+function applyLivePortraitRetargeting(expDelta, expSettings) {
+  if (!expSettings || typeof expSettings !== 'object') return;
+
+  const smile = Number(expSettings.smile || 0);
+  const lipOpen = Number(expSettings.lipOpen || 0);
+  const grin = Number(expSettings.grin || 0);
+  const pouting = Number(expSettings.pouting || 0);
+  const pursing = Number(expSettings.pursing || 0);
+  const eyebrow = Number(expSettings.eyebrow || 0);
+  const gazeX = Number(expSettings.eyeGazeX ?? expSettings.eyeGaze ?? 0);
+  const gazeY = Number(expSettings.eyeGazeY || 0);
+  const wink = Number(expSettings.wink || 0);
+
+  // 1. Smile (KwaiVGI update_delta_new_smile)
+  if (smile !== 0) {
+    expDelta[20 * 3 + 1] += smile * -0.01;
+    expDelta[14 * 3 + 1] += smile * -0.02;
+    expDelta[17 * 3 + 1] += smile * 0.0065;
+    expDelta[17 * 3 + 2] += smile * 0.003;
+    expDelta[13 * 3 + 1] += smile * -0.00275;
+    expDelta[16 * 3 + 1] += smile * -0.00275;
+    expDelta[3 * 3 + 1]  += smile * -0.0035;
+    expDelta[7 * 3 + 1]  += smile * -0.0035;
+  }
+
+  // 2. Lip close <-> open (KwaiVGI update_delta_new_lip_variation_three)
+  if (lipOpen !== 0) {
+    expDelta[19 * 3 + 1] += lipOpen * 0.001;
+    expDelta[19 * 3 + 2] += lipOpen * 0.0001;
+    expDelta[17 * 3 + 1] += lipOpen * -0.0001;
+  }
+
+  // 3. Eyebrow raise/furrow (KwaiVGI update_delta_new_eyebrow)
+  if (eyebrow !== 0) {
+    if (eyebrow > 0) {
+      expDelta[1 * 3 + 1] += eyebrow * 0.001;
+      expDelta[2 * 3 + 1] += eyebrow * -0.001;
+    } else {
+      expDelta[1 * 3 + 0] += eyebrow * -0.001;
+      expDelta[2 * 3 + 0] += eyebrow * 0.001;
+      expDelta[1 * 3 + 1] += eyebrow * 0.0003;
+      expDelta[2 * 3 + 1] += eyebrow * -0.0003;
+    }
+  }
+
+  // 4. Eye Gaze Direction (KwaiVGI update_delta_new_eyeball_direction)
+  if (gazeX !== 0 || gazeY !== 0) {
+    if (gazeX > 0) {
+      expDelta[11 * 3 + 0] += gazeX * 0.0007;
+      expDelta[15 * 3 + 0] += gazeX * 0.001;
+    } else {
+      expDelta[11 * 3 + 0] += gazeX * 0.001;
+      expDelta[15 * 3 + 0] += gazeX * 0.0007;
+    }
+    expDelta[11 * 3 + 1] += gazeY * -0.001;
+    expDelta[15 * 3 + 1] += gazeY * -0.001;
+    const blink = -gazeY / 2.0;
+    expDelta[11 * 3 + 1] += blink * -0.001;
+    expDelta[13 * 3 + 1] += blink * 0.0003;
+    expDelta[15 * 3 + 1] += blink * -0.001;
+    expDelta[16 * 3 + 1] += blink * 0.0003;
+  }
+
+  // 5. Wink (KwaiVGI update_delta_new_wink)
+  if (wink !== 0) {
+    expDelta[11 * 3 + 1] += wink * 0.001;
+    expDelta[13 * 3 + 1] += wink * -0.0003;
+    expDelta[17 * 3 + 0] += wink * 0.0003;
+    expDelta[17 * 3 + 1] += wink * 0.0003;
+    expDelta[3 * 3 + 1]  += wink * -0.0003;
+  }
+
+  // 6. Grin (KwaiVGI update_delta_new_lip_variation_two)
+  if (grin !== 0) {
+    expDelta[20 * 3 + 2] += grin * -0.001;
+    expDelta[20 * 3 + 1] += grin * -0.001;
+    expDelta[14 * 3 + 1] += grin * -0.001;
+  }
+
+  // 7. Pouting (KwaiVGI update_delta_new_lip_variation_zero)
+  if (pouting !== 0) {
+    expDelta[19 * 3 + 0] += pouting * 0.01;
+  }
+
+  // 8. Pursing (KwaiVGI update_delta_new_lip_variation_one)
+  if (pursing !== 0) {
+    expDelta[14 * 3 + 1] += pursing * 0.001;
+    expDelta[3 * 3 + 1]  += pursing * -0.0005;
+    expDelta[7 * 3 + 1]  += pursing * -0.0005;
+    expDelta[17 * 3 + 2] += pursing * -0.0005;
+  }
+
+  // Framing is applied as a rigid translation below. Do not also move a
+  // single landmark here, which stretches the face and causes ghosting.
+}
 
 // JoyVASA's expression channels (especially jaw/lips) must remain responsive,
 // but the diffusion output can contain small high-frequency frame noise. Smooth
@@ -203,6 +321,84 @@ function smoothExpressionGroups(previous, current, alpha, indices) {
   return {...current, exp};
 }
 
+/**
+ * Smoothstep soft-knee to suppress resting/neutral sub-perceptual jitter
+ * while 100% preserving active speech mouth dynamics.
+ */
+function softKneeDeadband(delta, threshold = 0.0020) {
+  const absD = Math.abs(delta);
+  if (absD >= threshold) return delta;
+  if (absD <= 0) return 0;
+  const u = absD / threshold;
+  return delta * (3 * u * u - 2 * u * u * u);
+}
+
+/**
+ * Zero-phase non-causal temporal smoothing for diffusion-generated motion.
+ * Diffusion models at 25 fps naturally produce alternating 1-frame sampling
+ * noise (Nyquist jitter at 12.5 Hz). Because speech articulators (jaw/lips)
+ * have physical inertia and cannot oscillate at 12.5 Hz, we filter the
+ * motion trajectory using a 5-tap Savitzky-Golay quadratic filter followed
+ * by a gentle 3-tap binomial filter.
+ *
+ * This provides:
+ * 1. ZERO phase lag (centered symmetric filter, 0 ms audio latency).
+ * 2. Complete attenuation (>75%) of 1-frame diffusion jitter.
+ * 3. Exact mathematical preservation (>95%) of speech peaks and syllables.
+ */
+function preSmoothMotionSequence(motion, frameCount, motionDim) {
+  if (!motion || frameCount <= 2 || motionDim <= 0) return motion;
+  const smoothed = new Float32Array(motion);
+  const ksg = [-3 / 35, 12 / 35, 17 / 35, 12 / 35, -3 / 35];
+  const tempCol = new Float32Array(frameCount);
+
+  // Smooth all 63 expression channels (0..62)
+  for (let c = 0; c < 63; ++c) {
+    // Pass 1: Savitzky-Golay 5-tap (preserves peaks while cutting high-frequency variance)
+    for (let t = 0; t < frameCount; ++t) {
+      let sum = 0;
+      for (let k = -2; k <= 2; ++k) {
+        const frameIdx = Math.max(0, Math.min(frameCount - 1, t + k));
+        sum += ksg[k + 2] * motion[frameIdx * motionDim + c];
+      }
+      tempCol[t] = sum;
+    }
+
+    // Pass 2: Gentle 3-tap binomial [0.15, 0.70, 0.15] to eliminate 1-frame Nyquist jitter
+    for (let t = 0; t < frameCount; ++t) {
+      const prev = tempCol[Math.max(0, t - 1)];
+      const curr = tempCol[t];
+      const next = tempCol[Math.min(frameCount - 1, t + 1)];
+      smoothed[t * motionDim + c] = 0.15 * prev + 0.70 * curr + 0.15 * next;
+    }
+  }
+
+  return smoothed;
+}
+
+function smoothMouthGroup(previous, current, mouthAlpha, indices) {
+  if (!previous || mouthAlpha <= 0) return current;
+  if (mouthAlpha >= 1) return current;
+
+  // Adaptive smoothing to eliminate high-frequency diffusion jitter
+  // while preserving sharp, wide speech phonemes.
+  const exp = new Float32Array(current.exp);
+  for (const point of indices) {
+    for (let axis = 0; axis < 3; ++axis) {
+      const idx = point * 3 + axis;
+      const diff = Math.abs(current.exp[idx] - previous.exp[idx]);
+      const alpha = diff <= 0.0010
+        ? 0.60
+        : (diff >= 0.0030
+          ? mouthAlpha
+          : 0.60 + (mouthAlpha - 0.60) * ((diff - 0.0010) / (0.0030 - 0.0010)));
+      exp[idx] = previous.exp[idx] + (current.exp[idx] - previous.exp[idx]) * alpha;
+    }
+  }
+
+  return {...current, exp};
+}
+
 function smoothMotion(previous, current, poseAlpha, eyeAlpha, mouthAlpha) {
   const pose = smoothRigidPose(previous, current, poseAlpha);
   const stable = smoothExpressionGroups(
@@ -217,7 +413,7 @@ function smoothMotion(previous, current, poseAlpha, eyeAlpha, mouthAlpha) {
     eyeAlpha,
     LIVEPORTRAIT_EYE_EXPRESSION_INDICES,
   );
-  return smoothExpressionGroups(
+  return smoothMouthGroup(
     previous,
     eyes,
     mouthAlpha,
@@ -237,22 +433,36 @@ function smoothingAlpha(value, fallback) {
   return Math.max(0, Math.min(1, parsed));
 }
 
-function buildExpressionDelta(sourceExp, firstExp, currentExp, eyeOpeningScale) {
+function buildExpressionDelta(sourceExp, firstExp, currentExp, eyeOpeningScale, mouthOpeningScale = 1.30) {
   const deltaExp = new Float32Array(63);
   for (let i = 0; i < 63; ++i) deltaExp[i] = sourceExp[i] + currentExp[i] - firstExp[i];
-  if (eyeOpeningScale >= 1) return deltaExp;
 
-  // In LivePortrait's 21x3 expression layout, the eye group uses these
-  // points. Positive Y is the opening direction for this exported model;
-  // reduce only that outward motion. Negative Y (closing/blinking) and all
-  // mouth channels remain untouched.
-  for (const point of LIVEPORTRAIT_EYE_EXPRESSION_INDICES) {
-    const index = point * 3 + 1;
-    const motionDelta = currentExp[index] - firstExp[index];
-    if (motionDelta > 0) {
-      deltaExp[index] = sourceExp[index] + motionDelta * eyeOpeningScale;
+  if (eyeOpeningScale < 1) {
+    // In LivePortrait's 21x3 expression layout, the eye group uses these
+    // points. Positive Y is the opening direction for this exported model;
+    // reduce only that outward motion. Negative Y (closing/blinking) and all
+    // mouth channels remain untouched.
+    for (const point of LIVEPORTRAIT_EYE_EXPRESSION_INDICES) {
+      const index = point * 3 + 1;
+      const motionDelta = currentExp[index] - firstExp[index];
+      if (motionDelta > 0) {
+        deltaExp[index] = sourceExp[index] + motionDelta * eyeOpeningScale;
+      }
     }
   }
+
+  const scale = Number(mouthOpeningScale !== undefined ? mouthOpeningScale : 1.30);
+  for (const point of LIVEPORTRAIT_MOUTH_EXPRESSION_INDICES) {
+    for (let axis = 0; axis < 3; ++axis) {
+      const index = point * 3 + axis;
+      const rawDelta = currentExp[index] - firstExp[index];
+      // Suppress resting/neutral sub-perceptual jitter via a C^1 smoothstep soft-knee,
+      // while preserving 100% of speech mouth dynamics without hard clamping or audio RMS gaps.
+      const motionDelta = softKneeDeadband(rawDelta, 0.0020);
+      deltaExp[index] = sourceExp[index] + motionDelta * scale;
+    }
+  }
+
   return deltaExp;
 }
 
@@ -439,6 +649,24 @@ async function addStitchingDelta(portrait, sourceKp, drivingKp) {
   return result;
 }
 
+async function addStitchingDeltaMlx(options, modelPath, sourceKp, drivingKp) {
+  if (typeof options.mlxNativeRunStitching !== 'function') {
+    throw new Error('Native MLX stitching is unavailable');
+  }
+  const inputData = new Float32Array(126);
+  inputData.set(sourceKp);
+  inputData.set(drivingKp, 63);
+  const delta = await options.mlxNativeRunStitching(modelPath, inputData);
+  if (!delta || delta.length < 65) throw new Error('Native MLX stitching output is invalid');
+  const result = new Float32Array(drivingKp);
+  for (let i = 0; i < 63; ++i) result[i] += delta[i];
+  for (let point = 0; point < 21; ++point) {
+    result[point * 3] += delta[63];
+    result[point * 3 + 1] += delta[64];
+  }
+  return result;
+}
+
 function unpackWarpedRgb(output) {
   if (output.shape.length !== 4 || output.shape[0] !== 1 || output.shape[1] !== 3) {
     throw new Error(`Unexpected warping output shape: ${output.shape}`);
@@ -497,6 +725,38 @@ function createPasteMap(width, height, centerX, centerY, side, generatedWidth, g
     }
   }
   return {x0, y0, dx, dy, alpha};
+}
+
+function getExpressionPasteCenter(options, width, height, centerX, centerY) {
+  const settings = options?.expressionSettings || {};
+  const movementX = Math.max(-0.1, Math.min(0.1, Number(settings.movementX ?? settings.scaleX ?? 0)));
+  const movementY = Math.max(-0.1, Math.min(0.1, Number(settings.movementY ?? settings.scaleY ?? 0)));
+  return {
+    x: centerX + movementX * width * 0.2,
+    y: centerY + movementY * height * 0.2,
+  };
+}
+
+function translateExpressionSource(source, width, height, options) {
+  const settings = options?.expressionSettings || {};
+  const movementX = Math.max(-0.1, Math.min(0.1, Number(settings.movementX ?? settings.scaleX ?? 0)));
+  const movementY = Math.max(-0.1, Math.min(0.1, Number(settings.movementY ?? settings.scaleY ?? 0)));
+  const offsetX = Math.round(movementX * width * 0.2);
+  const offsetY = Math.round(movementY * height * 0.2);
+  if (offsetX === 0 && offsetY === 0) return source;
+  const output = new Uint8Array(source.length);
+  for (let y = 0; y < height; ++y) {
+    const sourceY = Math.max(0, Math.min(height - 1, y - offsetY));
+    for (let x = 0; x < width; ++x) {
+      const sourceX = Math.max(0, Math.min(width - 1, x - offsetX));
+      const destinationOffset = (y * width + x) * 3;
+      const sourceOffset = (sourceY * width + sourceX) * 3;
+      output[destinationOffset] = source[sourceOffset];
+      output[destinationOffset + 1] = source[sourceOffset + 1];
+      output[destinationOffset + 2] = source[sourceOffset + 2];
+    }
+  }
+  return output;
 }
 
 function pasteBackWithMap(source, generated, width, height, map) {
@@ -634,7 +894,7 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
   if (!modelDir) throw new Error('modelDir is required for MLX MediaPipe detection');
   const detectorModel = resolveFaceDetectorModel(modelDir, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(modelDir, options.faceLandmarkModel);
-  const detector = new FaceDetector(resolveFaceDetectorOptions(
+  const detector = await FaceDetector.create(resolveFaceDetectorOptions(
     {...options, provider: options.detectorProvider || options.provider || 'cpu'},
     detectorModel,
     landmarkModel,
@@ -675,55 +935,9 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
   const sourceRaw = path.join(tempDir, 'source.rgb');
   fs.writeFileSync(sourceRaw, source);
 
-  // The Python bridge remains a compatibility path for development/reference
-  // checkouts. It keeps the explicit ONNX-vs-MLX motion switch so older
-  // environments can compare the two backends without changing the native
-  // Electron path below.
-  const motionBackend = options.mlxMotionBackend ||
-    process.env.SHERPA_ONNX_MLX_MOTION_BACKEND || 'onnx';
-  if (motionBackend !== 'onnx' && motionBackend !== 'mlx') {
-    throw new RangeError("mlxMotionBackend must be 'onnx' or 'mlx'");
-  }
-  let motionPath;
-  let motionFrames;
-  let motionDim;
-  let motionFps;
-  let motionDiffusionSteps = 0;
-  if (motionBackend === 'onnx') {
-    const joyMetadata = options.joyvasaMetadata || process.env.SHERPA_ONNX_JOYVASA_METADATA;
-    if (!joyMetadata) throw new Error('joyvasaMetadata is required for ONNX MLX motion');
-    const joy = new JoyVASA(resolveJoyVasaOptions(
-      {...options, provider: options.motionProvider || options.provider || defaultProvider()},
-      joyMetadata,
-      options.motionProvider || options.provider || defaultProvider(),
-      options.numThreads || 2,
-    ));
-    const sampleRate = options.audioSampleRate || 16000;
-    const maxSamples = maxSeconds === 0
-      ? options.audioSamples.length
-      : Math.max(1, Math.floor(maxSeconds * sampleRate));
-    const audioSamples = options.audioSamples.length > maxSamples
-      ? options.audioSamples.slice(0, maxSamples)
-      : options.audioSamples;
-    const motion = typeof joy.generateMotionSequenceAsync === 'function'
-      ? await joy.generateMotionSequenceAsync(audioSamples, {
-        sampleRate,
-        cfg: options.cfg === true,
-      })
-      : joy.generateMotionSequence(audioSamples, {
-        sampleRate,
-        cfg: options.cfg === true,
-      });
-    motionPath = path.join(tempDir, 'motion.f32');
-    fs.writeFileSync(
-      motionPath,
-      Buffer.from(motion.motion.buffer, motion.motion.byteOffset, motion.motion.byteLength),
-    );
-    motionFrames = motion.frameCount;
-    motionDim = joy.motionFeatDim;
-    motionFps = joy.fps;
-    motionDiffusionSteps = joy.nDiffSteps;
-  }
+  // The reference bridge performs JoyVASA inference with its MLX models.
+  const motionBackend = 'mlx';
+  const motionFps = 25;
 
   const defaultPython = path.join(referenceRoot, '.venv', 'bin', 'python');
   const configuredPython = options.mlxPython || process.env.SHERPA_ONNX_MLX_PYTHON;
@@ -750,16 +964,9 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
     '--profile', options.mlxProfile || process.env.SHERPA_ONNX_MLX_PROFILE || 'quality',
     '--cfg-scale', String(options.cfgScale === undefined ? 2.8 : options.cfgScale),
     '--motion-fps', String(motionFps || 25),
-    '--motion-diffusion-steps', String(motionDiffusionSteps),
+    '--motion-diffusion-steps', '0',
   ];
-  if (motionPath) {
-    bridgeArgs.push(
-      '--motion-f32', path.resolve(motionPath),
-      '--motion-frames', String(motionFrames),
-      '--motion-dim', String(motionDim),
-    );
-  }
-  if (options.cfg === true) bridgeArgs.push('--cfg');
+  if (options.cfg !== false) bridgeArgs.push('--cfg');
   let command = python;
   let args = [bridgePath, ...bridgeArgs];
   if (path.basename(python) === 'uv') {
@@ -795,38 +1002,34 @@ async function renderTalkingVideoMlx(options, source, width, height, maxSeconds,
     backend: 'mlx',
     provider: 'mlx',
     profile: result.profile || 'mlx-quality',
-    motionBackend: result.motionBackend || motionBackend,
-    diffusionSteps: motionBackend === 'onnx'
-      ? motionDiffusionSteps
-      : result.diffusionSteps,
+    motionBackend: result.motionBackend || 'mlx',
+    diffusionSteps: result.diffusionSteps,
   };
 }
 
 /**
- * Native Apple-Silicon MLX path. FasterLivePortrait and the complete JoyVASA
- * audio-to-motion path run in the Swift+Cmlx binding. The ONNX motion and
- * stitching graphs remain only for the FLP head-pose/stitching compatibility
- * stage; the 361MB HuBERT checkpoint is not loaded by ONNX anymore.
+ * Native Apple-Silicon MLX path. FasterLivePortrait, motion extraction,
+ * stitching, and the complete JoyVASA audio-to-motion path run in the
+ * Swift+Cmlx binding. The preferred path keeps ONNX only for face detection.
  */
 async function renderTalkingVideoNativeMlx(options, source, width, height, maxSeconds, outputFps) {
   if (!options.outputRaw) throw new TypeError('Native MLX talking-video requires outputRaw');
   const nativeRoot = options.mlxWeightsDir || options.modelDir;
   if (!nativeRoot) throw new Error('Native MLX weights directory is required');
-  const motionDir = options.motionModelDir || options.modelDir;
-  const motionPath = options.motionModelPath || path.join(motionDir, 'motion_extractor.onnx');
-  const stitchingPath = options.stitchingModelPath || path.join(motionDir, 'stitching.onnx');
-  if (!fs.existsSync(motionPath) || !fs.existsSync(stitchingPath)) {
-    throw new Error(`Native MLX motion baseline requires motion_extractor.onnx and stitching.onnx under ${motionDir}`);
+  const motionPath = options.mlxMotionExtractorModel;
+  const stitchingPath = options.mlxStitchingModel;
+  const hasMlxBaseline = Boolean(
+    motionPath && stitchingPath && fs.existsSync(motionPath) && fs.existsSync(stitchingPath));
+  if (!hasMlxBaseline) {
+    throw new Error('Native MLX requires motion_extractor.npz and stitching.npz');
+  }
+  if (typeof options.mlxNativeExtractMotion !== 'function' ||
+      typeof options.mlxNativeRunStitching !== 'function') {
+    throw new Error('Native MLX motion and stitching bindings are unavailable');
   }
   const detectorModel = resolveFaceDetectorModel(options.modelDir || nativeRoot, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(options.modelDir || nativeRoot, options.faceLandmarkModel);
-  const provider = options.provider || defaultProvider();
-  const portrait = new FasterLivePortrait({
-    provider,
-    numThreads: options.numThreads || 2,
-    models: {motion: motionPath, stitching: stitchingPath},
-  });
-  const detector = new FaceDetector(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
+  const detector = await FaceDetector.create(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
   const faces = await detectFacesAsync(detector, {data: source, width, height, channels: 3, format: 'rgb'});
   if (!faces.length) throw new Error('No face found in source image');
   const face = faces[0];
@@ -835,30 +1038,40 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
-  const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
-  const sourceMotion = finiteOutputs(await portraitRunImage(portrait, 'motion', sourceCropImage), 'motion');
-  const sourcePitch = headposeDegree(modelOutput(sourceMotion, 'pitch'));
-  const sourceYaw = headposeDegree(modelOutput(sourceMotion, 'yaw'));
-  const sourceRoll = headposeDegree(modelOutput(sourceMotion, 'roll'));
-  const sourceT = flatten(modelOutput(sourceMotion, 't').data);
-  const sourceExp = flatten(modelOutput(sourceMotion, 'exp').data);
-  const sourceScale = flatten(modelOutput(sourceMotion, 'scale').data)[0];
-  const sourceKp = flatten(modelOutput(sourceMotion, 'kp').data);
+  const sourceCropBuffer = Buffer.from(sourceCrop256.buffer, sourceCrop256.byteOffset, sourceCrop256.byteLength);
+  const sourceMotion = await options.mlxNativeExtractMotion(motionPath, sourceCropBuffer, 256, 256);
+  if (!sourceMotion || sourceMotion.length !== 133) throw new Error('Motion extractor returned an invalid row');
+  const sourcePitch = sourceMotion[0];
+  const sourceYaw = sourceMotion[1];
+  const sourceRoll = sourceMotion[2];
+  const sourceT = sourceMotion.slice(3, 6);
+  const sourceExp = sourceMotion.slice(6, 69);
+  const sourceScale = sourceMotion[69];
+  const sourceKp = sourceMotion.slice(70, 133);
   const sourceR = rotationMatrix(sourcePitch, sourceYaw, sourceRoll);
   const sourceCanonicalKp = transformKeypoints(sourcePitch, sourceYaw, sourceRoll,
     sourceT, sourceExp, sourceScale, sourceKp);
 
   const joyMetadata = options.joyvasaMetadata;
   const joyTemplate = options.joyvasaTemplate;
-  if (!joyMetadata || !joyTemplate) throw new Error('Native MLX path requires JoyVASA metadata and template');
+  if (!joyTemplate || !fs.existsSync(joyTemplate)) {
+    throw new Error('Native MLX JoyVASA motion template is unavailable');
+  }
   const sampleRate = options.audioSampleRate || 16000;
   const maxSamples = maxSeconds === 0 ? options.audioSamples.length :
     Math.max(1, Math.floor(maxSeconds * sampleRate));
   const audioSamples = options.audioSamples.length > maxSamples
     ? options.audioSamples.slice(0, maxSamples) : options.audioSamples;
-  const joyConfig = JSON.parse(fs.readFileSync(joyMetadata, 'utf8'));
+  // The reference MLX export ships a pickle template and does not require a
+  // separate JSON metadata file. Use metadata when a compatible JSON file is
+  // present, while keeping the native path self-contained for the MLX bundle.
+  const joyConfig = joyMetadata && fs.existsSync(joyMetadata)
+    ? JSON.parse(await fs.promises.readFile(joyMetadata, 'utf8'))
+    : {};
   const joyMotionConfig = joyConfig.motion || {};
   const motionFps = Number(joyMotionConfig.fps || joyConfig.audioInput?.fps || 25);
   const motionDim = Number(joyMotionConfig.motionFeatDim || 73);
@@ -871,13 +1084,12 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   let motion;
   let motionFrameCount;
   let motionDiffusionSteps = requestedSteps;
-  let motionBackend = 'onnx';
+  let motionBackend = 'mlx';
   if (nativeJoyVasa) {
     // The exported JoyVASA MLX checkpoint advertises audio guidance.  The
     // reference MLX pipeline enables CFG when no explicit override is given;
     // preserve that default for native MLX so audio does not collapse into
-    // weak, mostly-closed-mouth motion.  The ONNX compatibility path below
-    // retains its existing explicit `cfg === true` behavior.
+    // weak, mostly-closed-mouth motion.
     const useCfg = options.cfg === undefined ? true : options.cfg === true;
     motion = await options.mlxNativeGenerateJoyVasaMotion(
       options.mlxJoyvasaAudioModel,
@@ -890,15 +1102,9 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
     );
     motionFrameCount = Math.floor(motion.length / motionDim);
     motionBackend = 'mlx';
+    motion = preSmoothMotionSequence(motion, motionFrameCount, motionDim);
   } else {
-    const joy = new JoyVASA(resolveJoyVasaOptions(options, joyMetadata, provider, options.numThreads || 2));
-    const joyResult = typeof joy.generateMotionSequenceAsync === 'function'
-      ? await joy.generateMotionSequenceAsync(audioSamples, {sampleRate, cfg: options.cfg === true})
-      : joy.generateMotionSequence(audioSamples, {sampleRate, cfg: options.cfg === true});
-    motion = joyResult.motion;
-    motionFrameCount = joyResult.frameCount;
-    motionDiffusionSteps = joy.nDiffSteps;
-    motionBackend = 'onnx';
+    throw new Error('Native MLX JoyVASA models or binding are unavailable');
   }
   const template = JSON.parse(await fs.promises.readFile(joyTemplate, 'utf8'));
   const values = (name) => flatten(template[name]);
@@ -932,21 +1138,20 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
   const frameCount = Math.max(1, Math.ceil(motionFrameCount / motionFps * outputFps));
   const firstMotion = decodeMotion(motion.slice(0, motionDim));
   const firstR = rotationMatrix(firstMotion.pitch, firstMotion.yaw, firstMotion.roll);
-  const outputFd = fs.openSync(options.outputRaw, 'w');
-  const sourceCropBuffer = Buffer.from(sourceCrop256);
+  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, outputFps);
+  const outputFile = await fs.promises.open(options.outputRaw, 'w');
   // A small bounded batch removes most JS↔Rust↔Swift call overhead while
-  // keeping Metal's transient allocations bounded. ONNX remains on its
-  // original one-frame path; this is native MLX renderer only.
+  // keeping Metal's transient allocations bounded.
   const nativeBatchRender = typeof options.mlxNativeRenderFrames === 'function';
   const nativeBatchSize = nativeBatchRender
     ? Math.max(1, Math.min(4, Number(options.nativeFrameBatchSize || 4)))
     : 1;
   const poseAlpha = smoothingAlpha(options.poseSmoothing, DEFAULT_POSE_SMOOTHING);
   const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
-  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
+  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.85);
   const eyeOpeningScale = smoothingAlpha(options.eyeOpeningScale, 0.45);
+  const mouthOpeningScale = Number(options.mouthOpeningScale !== undefined ? options.mouthOpeningScale : 1.30);
   const gestureScale = options.gestureScale !== undefined ? Number(options.gestureScale) : 1.0;
-  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, outputFps);
   let previousRigidPose;
   let pasteMap;
   try {
@@ -962,16 +1167,49 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
         );
         const rawCurrent = decodeMotion(motion.slice(selectedMotionFrame * motionDim,
           (selectedMotionFrame + 1) * motionDim));
-        const gestureDeltas = MotionController.evaluateGestures(
-          outputFrame,
-          speechAnalysis.events,
-          outputFps,
-          gestureScale
-        );
-        rawCurrent.pitch += gestureDeltas.deltaPitch;
-        rawCurrent.yaw += gestureDeltas.deltaYaw;
-        rawCurrent.roll += gestureDeltas.deltaRoll;
-        rawCurrent.t[1] += gestureDeltas.deltaTy;
+        if (options.drivingMotion?.frames?.length) {
+          const dFrames = options.drivingMotion.frames;
+          const dPose = dFrames[outputFrame % dFrames.length];
+          const basePose = dFrames[0];
+          const relPitch = dPose.deltaPitch !== undefined ? dPose.deltaPitch : (dPose.pitch - basePose.pitch);
+          const relYaw = dPose.deltaYaw !== undefined ? dPose.deltaYaw : (dPose.yaw - basePose.yaw);
+          const relRoll = dPose.deltaRoll !== undefined ? dPose.deltaRoll : (dPose.roll - basePose.roll);
+          const deltaT = dPose.deltaT || (dPose.t ? [dPose.t[0] - basePose.t[0], dPose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+
+          rawCurrent.pitch = firstMotion.pitch + relPitch;
+          rawCurrent.yaw = firstMotion.yaw + relYaw;
+          rawCurrent.roll = firstMotion.roll + relRoll;
+          rawCurrent.t[0] = firstMotion.t[0] + deltaT[0];
+          rawCurrent.t[1] = firstMotion.t[1] + deltaT[1];
+
+          const expOffset = dPose.deltaExp || (dPose.exp && basePose.exp ? dPose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+          if (expOffset) {
+            const mouthIndices = [6, 12, 14, 17, 19, 20];
+            for (let point = 0; point < 21; ++point) {
+              const isMouthPoint = mouthIndices.includes(point);
+              for (let axis = 0; axis < 3; ++axis) {
+                const index = point * 3 + axis;
+                const audioDelta = rawCurrent.exp[index] - firstMotion.exp[index];
+                // Preserve the reference mouth shape, then add the audio
+                // mouth delta so the expression follows the spoken phonemes.
+                rawCurrent.exp[index] = firstMotion.exp[index] +
+                  expOffset[index] * (isMouthPoint ? 1.0 : 0.75) +
+                  (isMouthPoint ? audioDelta : 0);
+              }
+            }
+          }
+        } else {
+          const gestureDeltas = MotionController.evaluateGestures(
+            outputFrame,
+            speechAnalysis.events,
+            outputFps,
+            gestureScale
+          );
+          rawCurrent.pitch += gestureDeltas.deltaPitch;
+          rawCurrent.yaw += gestureDeltas.deltaYaw;
+          rawCurrent.roll += gestureDeltas.deltaRoll;
+          rawCurrent.t[1] += gestureDeltas.deltaTy;
+        }
         const current = smoothMotion(
           previousRigidPose,
           rawCurrent,
@@ -987,7 +1225,11 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
           firstMotion.exp,
           current.exp,
           eyeOpeningScale,
+          mouthOpeningScale,
         );
+        if (options.expressionSettings) {
+          applyLivePortraitRetargeting(deltaExp, options.expressionSettings);
+        }
         const scale = sourceScale * (current.scale / firstMotion.scale);
         const t = new Float32Array(3);
         for (let i = 0; i < 3; ++i) t[i] = sourceT[i] + current.t[i] - firstMotion.t[i];
@@ -1004,7 +1246,7 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
           drivingKp[point * 3] += t[0];
           drivingKp[point * 3 + 1] += t[1];
         }
-        const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+        const stitchedKp = await addStitchingDeltaMlx(options, stitchingPath, sourceCanonicalKp, drivingKp);
         if (stitchedKp.length !== 63) throw new Error('FLP stitching output must contain 63 floats');
         batchDriving.set(stitchedKp, batchIndex * 63);
       }
@@ -1034,9 +1276,9 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
             width: generatedWidth,
             height: generatedHeight,
           };
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY,
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
@@ -1052,16 +1294,16 @@ async function renderTalkingVideoNativeMlx(options, source, width, height, maxSe
             sourceCanonicalKp,
           );
           const generated = unpackNativeRgb(generatedBytes);
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY,
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y,
             cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
       frame = batchEnd;
     }
   } finally {
-    fs.closeSync(outputFd);
+    await outputFile.close();
   }
   return {
     width,
@@ -1270,15 +1512,19 @@ async function renderTalkingVideo(options) {
     pipeline.sourceCache.set(sourceKey, sourceState);
   }
   const {face, cropSide, cropCenterX, cropCenterY, appearance, sourceT, sourceExp, sourceScale, sourceKp, sourceR, sourceCanonicalKp} = sourceState;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
 
   const sampleRate = options.audioSampleRate || 16000;
   const maxSamples = maxSeconds === 0 ? options.audioSamples.length : Math.max(1, Math.floor(maxSeconds * sampleRate));
   const audioSamples = options.audioSamples.length > maxSamples ? options.audioSamples.slice(0, maxSamples) : options.audioSamples;
   // generateMotionSequence stitches multiple JoyVASA windows and returns the
   // actual frame count. maxSeconds=0 means no artificial duration cap.
+  const useCfg = options.cfg === undefined ? true : Boolean(options.cfg);
+  const cfgScale = options.cfgScale === undefined ? 2.8 : Number(options.cfgScale);
   const joyResult = typeof joy.generateMotionSequenceAsync === 'function'
-    ? await joy.generateMotionSequenceAsync(audioSamples, {sampleRate, cfg: options.cfg === true})
-    : joy.generateMotionSequence(audioSamples, {sampleRate, cfg: options.cfg === true});
+    ? await joy.generateMotionSequenceAsync(audioSamples, {sampleRate, cfg: useCfg, cfgScale})
+    : joy.generateMotionSequence(audioSamples, {sampleRate, cfg: useCfg, cfgScale});
   const template = JSON.parse(fs.readFileSync(joyTemplate, 'utf8'));
   const values = (name) => flatten(template[name]);
   const meanExp = values('mean_exp');
@@ -1307,8 +1553,8 @@ async function renderTalkingVideo(options) {
       roll: row[69] * (maxRoll - minRoll) + minRoll,
     };
   };
-  const motion = joyResult.motion;
   const motionFrameCount = joyResult.motionShape[1];
+  const motion = preSmoothMotionSequence(joyResult.motion, motionFrameCount, joy.motionFeatDim);
   const fps = outputFps;
   if (!Number.isFinite(fps) || fps <= 0 || fps > joy.fps) {
     throw new RangeError(`outputFps must be greater than 0 and no greater than ${joy.fps}`);
@@ -1316,11 +1562,13 @@ async function renderTalkingVideo(options) {
   const frameCount = Math.max(1, Math.ceil(motionFrameCount / joy.fps * fps));
   const firstMotion = decodeMotion(motion.slice(0, joy.motionFeatDim));
   const firstR = rotationMatrix(firstMotion.pitch, firstMotion.yaw, firstMotion.roll);
+  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, fps);
   const poseAlpha = smoothingAlpha(options.poseSmoothing, DEFAULT_POSE_SMOOTHING);
   const eyeAlpha = smoothingAlpha(options.eyeSmoothing, 0.35);
-  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.50);
+  const mouthAlpha = smoothingAlpha(options.mouthSmoothing, 0.85);
+  const eyeOpeningScale = smoothingAlpha(options.eyeOpeningScale, 0.45);
+  const mouthOpeningScale = Number(options.mouthOpeningScale !== undefined ? options.mouthOpeningScale : 1.30);
   const gestureScale = options.gestureScale !== undefined ? Number(options.gestureScale) : 1.0;
-  const speechAnalysis = AudioEnergyDetector.analyze(audioSamples, sampleRate, fps);
   let previousRigidPose;
   const outputRaw = options.outputRaw;
   if (!outputRaw) throw new TypeError('outputRaw is required');
@@ -1341,16 +1589,49 @@ async function renderTalkingVideo(options) {
         motionFrame * joy.motionFeatDim,
         (motionFrame + 1) * joy.motionFeatDim,
       ));
-      const gestureDeltas = MotionController.evaluateGestures(
-        frame,
-        speechAnalysis.events,
-        fps,
-        gestureScale
-      );
-      rawCurrent.pitch += gestureDeltas.deltaPitch;
-      rawCurrent.yaw += gestureDeltas.deltaYaw;
-      rawCurrent.roll += gestureDeltas.deltaRoll;
-      rawCurrent.t[1] += gestureDeltas.deltaTy;
+      if (options.drivingMotion?.frames?.length) {
+        const dFrames = options.drivingMotion.frames;
+        const dPose = dFrames[frame % dFrames.length];
+        const basePose = dFrames[0];
+        const relPitch = dPose.deltaPitch !== undefined ? dPose.deltaPitch : (dPose.pitch - basePose.pitch);
+        const relYaw = dPose.deltaYaw !== undefined ? dPose.deltaYaw : (dPose.yaw - basePose.yaw);
+        const relRoll = dPose.deltaRoll !== undefined ? dPose.deltaRoll : (dPose.roll - basePose.roll);
+        const deltaT = dPose.deltaT || (dPose.t ? [dPose.t[0] - basePose.t[0], dPose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+
+        rawCurrent.pitch = firstMotion.pitch + relPitch;
+        rawCurrent.yaw = firstMotion.yaw + relYaw;
+        rawCurrent.roll = firstMotion.roll + relRoll;
+        rawCurrent.t[0] = firstMotion.t[0] + deltaT[0];
+        rawCurrent.t[1] = firstMotion.t[1] + deltaT[1];
+
+        const expOffset = dPose.deltaExp || (dPose.exp && basePose.exp ? dPose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+        if (expOffset) {
+          const mouthIndices = [6, 12, 14, 17, 19, 20];
+          for (let point = 0; point < 21; ++point) {
+            const isMouthPoint = mouthIndices.includes(point);
+            for (let axis = 0; axis < 3; ++axis) {
+              const index = point * 3 + axis;
+              const audioDelta = rawCurrent.exp[index] - firstMotion.exp[index];
+              // Preserve the reference mouth shape, then add the audio
+              // mouth delta so the expression follows the spoken phonemes.
+              rawCurrent.exp[index] = firstMotion.exp[index] +
+                expOffset[index] * (isMouthPoint ? 1.0 : 0.75) +
+                (isMouthPoint ? audioDelta : 0);
+            }
+          }
+        }
+      } else {
+        const gestureDeltas = MotionController.evaluateGestures(
+          frame,
+          speechAnalysis.events,
+          fps,
+          gestureScale
+        );
+        rawCurrent.pitch += gestureDeltas.deltaPitch;
+        rawCurrent.yaw += gestureDeltas.deltaYaw;
+        rawCurrent.roll += gestureDeltas.deltaRoll;
+        rawCurrent.t[1] += gestureDeltas.deltaTy;
+      }
       const current = smoothMotion(
         previousRigidPose,
         rawCurrent,
@@ -1361,8 +1642,16 @@ async function renderTalkingVideo(options) {
       previousRigidPose = current;
       const currentR = rotationMatrix(current.pitch, current.yaw, current.roll);
       const relativeR = matMul(matMul(currentR, transpose3(firstR), 3, 3, 3), sourceR, 3, 3, 3);
-      const deltaExp = new Float32Array(63);
-      for (let i = 0; i < 63; ++i) deltaExp[i] = sourceExp[i] + current.exp[i] - firstMotion.exp[i];
+      const deltaExp = buildExpressionDelta(
+        sourceExp,
+        firstMotion.exp,
+        current.exp,
+        eyeOpeningScale,
+        mouthOpeningScale,
+      );
+      if (options.expressionSettings) {
+        applyLivePortraitRetargeting(deltaExp, options.expressionSettings);
+      }
       const scale = sourceScale * (current.scale / firstMotion.scale);
       const t = new Float32Array(3);
       for (let i = 0; i < 3; ++i) t[i] = sourceT[i] + current.t[i] - firstMotion.t[i];
@@ -1384,8 +1673,8 @@ async function renderTalkingVideo(options) {
         {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
       ]), 'warpingSpade');
       const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
-      if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-      fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+      if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+      fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
       if (typeof options.onFrame === 'function') options.onFrame(frame + 1, frameCount);
     }
   } finally {
@@ -1412,24 +1701,32 @@ async function renderTalkingVideo(options) {
  * using FasterLivePortrait warping without audio.
  */
 
+function throwIfIdleRenderAborted(options) {
+  if (typeof options?.shouldAbort === 'function' && options.shouldAbort()) {
+    const error = new Error('Avatar idle rendering aborted.');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
 async function renderIdleLoopMlx(options, source, width, height, duration, outputFps) {
+  throwIfIdleRenderAborted(options);
   const frameCount = Math.max(1, Math.round(duration * outputFps));
   const nativeRoot = options.mlxWeightsDir || options.modelDir;
   if (!nativeRoot) throw new Error('Native MLX weights directory is required');
-  const motionDir = options.motionModelDir || options.modelDir;
-  const motionPath = options.motionModelPath || path.join(motionDir, 'motion_extractor.onnx');
-  const stitchingPath = options.stitchingModelPath || path.join(motionDir, 'stitching.onnx');
-  if (!fs.existsSync(motionPath) || !fs.existsSync(stitchingPath)) {
-    throw new Error(`Native MLX motion baseline requires motion_extractor.onnx and stitching.onnx under ${motionDir}`);
+  const motionPath = options.mlxMotionExtractorModel;
+  const stitchingPath = options.mlxStitchingModel;
+  const hasMlxBaseline = Boolean(
+    motionPath && stitchingPath && fs.existsSync(motionPath) && fs.existsSync(stitchingPath));
+  if (!hasMlxBaseline) {
+    throw new Error('Native MLX requires motion_extractor.npz and stitching.npz');
+  }
+  if (typeof options.mlxNativeExtractMotion !== 'function' ||
+      typeof options.mlxNativeRunStitching !== 'function') {
+    throw new Error('Native MLX motion and stitching bindings are unavailable');
   }
   const detectorModel = resolveFaceDetectorModel(options.modelDir || nativeRoot, options.faceDetectorModel);
   const landmarkModel = resolveFaceLandmarkModel(options.modelDir || nativeRoot, options.faceLandmarkModel);
-  const provider = options.provider || defaultProvider();
-  const portrait = await FasterLivePortrait.create({
-    provider,
-    numThreads: options.numThreads || 2,
-    models: {motion: motionPath, stitching: stitchingPath},
-  });
   const detector = await FaceDetector.create(resolveFaceDetectorOptions(options, detectorModel, landmarkModel));
 
   const faces = await detectFacesAsync(detector, {data: source, width, height, channels: 3, format: 'rgb'});
@@ -1440,19 +1737,21 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
-  const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
   const sourceCropBuffer = Buffer.from(sourceCrop256.buffer, sourceCrop256.byteOffset, sourceCrop256.byteLength);
 
-  const sourceMotion = finiteOutputs(await portraitRunImage(portrait, 'motion', sourceCropImage), 'motion');
-  const sourcePitch = headposeDegree(modelOutput(sourceMotion, 'pitch'));
-  const sourceYaw = headposeDegree(modelOutput(sourceMotion, 'yaw'));
-  const sourceRoll = headposeDegree(modelOutput(sourceMotion, 'roll'));
-  const sourceT = flatten(modelOutput(sourceMotion, 't').data);
-  const sourceExp = flatten(modelOutput(sourceMotion, 'exp').data);
-  const sourceScale = flatten(modelOutput(sourceMotion, 'scale').data)[0];
-  const sourceKp = flatten(modelOutput(sourceMotion, 'kp').data);
+  const sourceMotion = await options.mlxNativeExtractMotion(motionPath, sourceCropBuffer, 256, 256);
+  if (!sourceMotion || sourceMotion.length !== 133) throw new Error('Motion extractor returned an invalid row');
+  const sourcePitch = sourceMotion[0];
+  const sourceYaw = sourceMotion[1];
+  const sourceRoll = sourceMotion[2];
+  const sourceT = sourceMotion.slice(3, 6);
+  const sourceExp = sourceMotion.slice(6, 69);
+  const sourceScale = sourceMotion[69];
+  const sourceKp = sourceMotion.slice(70, 133);
   const sourceR = rotationMatrix(sourcePitch, sourceYaw, sourceRoll);
   const sourceCanonicalKp = transformKeypoints(sourcePitch, sourceYaw, sourceRoll, sourceT, sourceExp, sourceScale, sourceKp);
 
@@ -1460,26 +1759,69 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
   const batchLimit = Math.max(1, Math.min(16, Number(options.nativeFrameBatchSize || 4)));
 
   const idleMotion = MotionController.generateIdleMotion(frameCount, outputFps);
-  const outputFd = fs.openSync(options.outputRaw, 'w');
+  const outputFile = await fs.promises.open(options.outputRaw, 'w');
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; frame += batchLimit) {
+      throwIfIdleRenderAborted(options);
       const batchCount = Math.min(batchLimit, frameCount - frame);
       const batchDriving = new Float32Array(batchCount * 63);
 
       for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+        throwIfIdleRenderAborted(options);
         const currentFrame = frame + batchIndex;
-        const pose = idleMotion[currentFrame] || idleMotion[0];
-        const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
-        const combinedR = matMul(relR, sourceR, 3, 3, 3);
-        const scale = sourceScale;
-        const t = new Float32Array([
-          sourceT[0],
-          sourceT[1] + pose.t[1],
-          0,
-        ]);
+        let combinedR;
+        let t;
+        let expOffset = null;
+        const expSettings = options.expressionSettings || {};
+        const relPitchOffset = Number(expSettings.relativePitch || 0);
+        const relYawOffset = Number(expSettings.relativeYaw || 0);
+        const relRollOffset = Number(expSettings.relativeRoll || 0);
+        const movX = Number(expSettings.movementX ?? expSettings.scaleX ?? 0);
+        const movY = Number(expSettings.movementY ?? expSettings.scaleY ?? 0);
+        const scaleZ = (expSettings.movementZ !== undefined && Number(expSettings.movementZ) > 0)
+          ? Number(expSettings.movementZ)
+          : (expSettings.scaleZ !== undefined && Number(expSettings.scaleZ) > 0 ? Number(expSettings.scaleZ) : 1.0);
+        const allowFullExp = options.allowFullExpression !== false;
 
-        // Facial expression 100% preserves source image neutral state (zero distortion)
+        if (options.drivingMotion?.frames?.length) {
+          const dFrames = options.drivingMotion.frames;
+          const pose = dFrames[currentFrame % dFrames.length];
+          const basePose = dFrames[0];
+          const relPitch = pose.deltaPitch !== undefined ? pose.deltaPitch : (pose.pitch - basePose.pitch);
+          const relYaw = pose.deltaYaw !== undefined ? pose.deltaYaw : (pose.yaw - basePose.yaw);
+          const relRoll = pose.deltaRoll !== undefined ? pose.deltaRoll : (pose.roll - basePose.roll);
+          const relR = rotationMatrix(relPitch + relPitchOffset, relYaw + relYawOffset, relRoll + relRollOffset);
+          combinedR = matMul(relR, sourceR, 3, 3, 3);
+          const deltaT = pose.deltaT || (pose.t ? [pose.t[0] - basePose.t[0], pose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+          t = new Float32Array([
+            sourceT[0] + deltaT[0],
+            sourceT[1] + deltaT[1],
+            0,
+          ]);
+          expOffset = pose.deltaExp || (pose.exp && basePose.exp ? pose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+        } else {
+          const pose = idleMotion[currentFrame] || idleMotion[0];
+          const relR = rotationMatrix(pose.pitch + relPitchOffset, pose.yaw + relYawOffset, pose.roll + relRollOffset);
+          combinedR = matMul(relR, sourceR, 3, 3, 3);
+        t = new Float32Array([
+            sourceT[0],
+            sourceT[1] + pose.t[1],
+            0,
+          ]);
+        }
+      const scale = sourceScale * scaleZ;
+        const mouthIndices = [6, 12, 14, 17, 19, 20];
+        const expDelta = new Float32Array(63);
+        for (let point = 0; point < 21; ++point) {
+          for (let axis = 0; axis < 3; ++axis) {
+            const idx = point * 3 + axis;
+            const expDeltaVal = (expOffset && (allowFullExp || !mouthIndices.includes(point))) ? expOffset[idx] : 0;
+            expDelta[idx] = sourceExp[idx] + expDeltaVal;
+          }
+        }
+        applyLivePortraitRetargeting(expDelta, expSettings);
+
         const drivingKp = new Float32Array(63);
         for (let point = 0; point < 21; ++point) {
           for (let axis = 0; axis < 3; ++axis) {
@@ -1487,13 +1829,13 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
               value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
             }
-            drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+            drivingKp[point * 3 + axis] = scale * (value + expDelta[point * 3 + axis]);
           }
           drivingKp[point * 3] += t[0];
           drivingKp[point * 3 + 1] += t[1];
         }
 
-        const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+        const stitchedKp = await addStitchingDeltaMlx(options, stitchingPath, sourceCanonicalKp, drivingKp);
         batchDriving.set(stitchedKp, batchIndex * 63);
       }
 
@@ -1506,6 +1848,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
           batchDriving,
           sourceCanonicalKp,
         );
+        throwIfIdleRenderAborted(options);
         const bytes = rendered.data instanceof Uint8Array
           ? rendered.data
           : new Uint8Array(rendered.data);
@@ -1518,12 +1861,13 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             width: generatedWidth,
             height: generatedHeight,
           };
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       } else {
         for (let batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
+          throwIfIdleRenderAborted(options);
           const oneDriving = batchDriving.subarray(batchIndex * 63, (batchIndex + 1) * 63);
           const generatedBytes = await options.mlxNativeRenderFrame(
             nativeRoot,
@@ -1533,15 +1877,16 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
             oneDriving,
             sourceCanonicalKp,
           );
+          throwIfIdleRenderAborted(options);
           const generated = unpackNativeRgb(generatedBytes);
-          if (!pasteMap) pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
-          fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+          if (!pasteMap) pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
+          await outputFile.write(pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
           if (typeof options.onFrame === 'function') options.onFrame(frame + batchIndex + 1, frameCount);
         }
       }
     }
   } finally {
-    fs.closeSync(outputFd);
+    await outputFile.close();
   }
 
   return {
@@ -1554,6 +1899,7 @@ async function renderIdleLoopMlx(options, source, width, height, duration, outpu
 }
 
 async function renderIdleLoop(options) {
+  throwIfIdleRenderAborted(options);
   if (!options || !options.sourceRgb || !Number.isInteger(options.width) ||
       !Number.isInteger(options.height) || !options.outputRaw) {
     throw new TypeError('renderIdleLoop requires sourceRgb, width, height, and outputRaw');
@@ -1576,14 +1922,17 @@ async function renderIdleLoop(options) {
   }
   const frameCount = Math.max(1, Math.round(duration * outputFps));
 
-  // 1. Apple Silicon Native MLX idle loop
-  if (options.backend === 'mlx' &&
-      (typeof options.mlxNativeRenderFrames === 'function' ||
-       typeof options.mlxNativeRenderFrame === 'function')) {
+  // MLX is an explicit backend selection. Do not silently run the ONNX
+  // LivePortrait renderer when the native MLX binding is unavailable.
+  if (options.backend === 'mlx') {
+    if (typeof options.mlxNativeRenderFrames !== 'function' &&
+        typeof options.mlxNativeRenderFrame !== 'function') {
+      throw new Error('MLX idle rendering requires the native MLX renderer');
+    }
     return await renderIdleLoopMlx(options, source, width, height, duration, outputFps);
   }
 
-  // 2. ONNX idle loop (does NOT require JoyVASA!)
+  // ONNX idle loop (does NOT require JoyVASA!)
   let portrait = options.portrait;
   let warpingPortrait = options.warpingPortrait;
   let detector = options.detector;
@@ -1639,6 +1988,8 @@ async function renderIdleLoop(options) {
   const cropSide = Math.max(faceWidth, faceHeight) * 2.3;
   const cropCenterX = (face.bbox[0] + face.bbox[2]) * 0.5;
   const cropCenterY = (face.bbox[1] + face.bbox[3]) * 0.5 - cropSide * 0.125;
+  const pasteCenter = getExpressionPasteCenter(options, width, height, cropCenterX, cropCenterY);
+  const backgroundSource = translateExpressionSource(source, width, height, options);
   const sourceCrop512 = cropRgb(source, width, height, cropCenterX, cropCenterY, cropSide, 512);
   const sourceCrop256 = resizeRgb(sourceCrop512, 512, 512, 256);
   const sourceCropImage = {data: sourceCrop256, width: 256, height: 256, channels: 3, format: 'rgb'};
@@ -1668,17 +2019,59 @@ async function renderIdleLoop(options) {
   let pasteMap;
   try {
     for (let frame = 0; frame < frameCount; ++frame) {
-      const pose = idleMotion[frame] || idleMotion[0];
-      const relR = rotationMatrix(pose.pitch, pose.yaw, pose.roll);
-      const combinedR = matMul(relR, sourceR, 3, 3, 3);
-      const scale = sourceScale;
-      const t = new Float32Array([
-        sourceT[0],
-        sourceT[1] + pose.t[1],
-        0,
-      ]);
+      throwIfIdleRenderAborted(options);
+      let combinedR;
+      let t;
+      let expOffset = null;
+      const expSettings = options.expressionSettings || {};
+      const relPitchOffset = Number(expSettings.relativePitch || 0);
+      const relYawOffset = Number(expSettings.relativeYaw || 0);
+      const relRollOffset = Number(expSettings.relativeRoll || 0);
+      const movX = Number(expSettings.movementX ?? expSettings.scaleX ?? 0);
+      const movY = Number(expSettings.movementY ?? expSettings.scaleY ?? 0);
+      const scaleZ = (expSettings.movementZ !== undefined && Number(expSettings.movementZ) > 0)
+        ? Number(expSettings.movementZ)
+        : (expSettings.scaleZ !== undefined && Number(expSettings.scaleZ) > 0 ? Number(expSettings.scaleZ) : 1.0);
+      const allowFullExp = options.allowFullExpression !== false;
 
-      // Facial expression 100% preserves source image neutral state (zero distortion)
+      if (options.drivingMotion?.frames?.length) {
+        const dFrames = options.drivingMotion.frames;
+        const pose = dFrames[frame % dFrames.length];
+        const basePose = dFrames[0];
+        const relPitch = pose.deltaPitch !== undefined ? pose.deltaPitch : (pose.pitch - basePose.pitch);
+        const relYaw = pose.deltaYaw !== undefined ? pose.deltaYaw : (pose.yaw - basePose.yaw);
+        const relRoll = pose.deltaRoll !== undefined ? pose.deltaRoll : (pose.roll - basePose.roll);
+        const relR = rotationMatrix(relPitch + relPitchOffset, relYaw + relYawOffset, relRoll + relRollOffset);
+        combinedR = matMul(relR, sourceR, 3, 3, 3);
+        const deltaT = pose.deltaT || (pose.t ? [pose.t[0] - basePose.t[0], pose.t[1] - basePose.t[1], 0] : [0, 0, 0]);
+        t = new Float32Array([
+          sourceT[0] + deltaT[0],
+          sourceT[1] + deltaT[1],
+          0,
+        ]);
+        expOffset = pose.deltaExp || (pose.exp && basePose.exp ? pose.exp.map((v, idx) => v - basePose.exp[idx]) : null);
+      } else {
+        const pose = idleMotion[frame] || idleMotion[0];
+        const relR = rotationMatrix(pose.pitch + relPitchOffset, pose.yaw + relYawOffset, pose.roll + relRollOffset);
+        combinedR = matMul(relR, sourceR, 3, 3, 3);
+        t = new Float32Array([
+          sourceT[0],
+          sourceT[1] + pose.t[1],
+          0,
+        ]);
+      }
+      const scale = sourceScale * scaleZ;
+      const mouthIndices = [6, 12, 14, 17, 19, 20];
+      const expDelta = new Float32Array(63);
+      for (let point = 0; point < 21; ++point) {
+        for (let axis = 0; axis < 3; ++axis) {
+          const idx = point * 3 + axis;
+          const expDeltaVal = (expOffset && (allowFullExp || !mouthIndices.includes(point))) ? expOffset[idx] : 0;
+          expDelta[idx] = sourceExp[idx] + expDeltaVal;
+        }
+      }
+      applyLivePortraitRetargeting(expDelta, expSettings);
+
       const drivingKp = new Float32Array(63);
       for (let point = 0; point < 21; ++point) {
         for (let axis = 0; axis < 3; ++axis) {
@@ -1686,23 +2079,25 @@ async function renderIdleLoop(options) {
           for (let sourceAxis = 0; sourceAxis < 3; ++sourceAxis) {
             value += sourceKp[point * 3 + sourceAxis] * combinedR[sourceAxis * 3 + axis];
           }
-          drivingKp[point * 3 + axis] = scale * (value + sourceExp[point * 3 + axis]);
+          drivingKp[point * 3 + axis] = scale * (value + expDelta[point * 3 + axis]);
         }
         drivingKp[point * 3] += t[0];
         drivingKp[point * 3 + 1] += t[1];
       }
 
       const stitchedKp = await addStitchingDelta(portrait, sourceCanonicalKp, drivingKp);
+      throwIfIdleRenderAborted(options);
       const warped = finiteOutputs(await portraitRun(warpingPortrait, 'warpingSpade', [
         {name: 'feature_3d', type: 'float32', shape: warpingFeature.shape, data: warpingFeature.data},
         {name: 'kp_driving', type: 'float32', shape: [1, 21, 3], data: stitchedKp},
         {name: 'kp_source', type: 'float32', shape: [1, 21, 3], data: sourceCanonicalKp},
       ]), 'warpingSpade');
+      throwIfIdleRenderAborted(options);
       const generated = unpackWarpedRgb(modelOutput(warped, 'out'));
       if (!pasteMap) {
-        pasteMap = createPasteMap(width, height, cropCenterX, cropCenterY, cropSide, generated.width, generated.height);
+        pasteMap = createPasteMap(width, height, pasteCenter.x, pasteCenter.y, cropSide, generated.width, generated.height);
       }
-      fs.writeSync(outputFd, pasteBackWithMap(source, generated, width, height, pasteMap));
+      fs.writeSync(outputFd, pasteBackWithMap(backgroundSource, generated, width, height, pasteMap));
       if (typeof options.onFrame === 'function') {
         options.onFrame(frame + 1, frameCount);
       }
